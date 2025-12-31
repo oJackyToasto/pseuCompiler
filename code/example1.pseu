@@ -1,0 +1,13 @@
+FUNCTION CheckList(CheckName : STRING) RETURNS BOOL
+    DECLARE Line : STRING, FileName <- "guestList.txt" : STRING
+    OPENFILE FileName FOR READ
+    WHILE NOT EOF(FileName) DO
+        READFILE FileName, Line
+        IF Line = CheckName DO
+            CLOSEFILE FileName
+            RETURN TRUE
+        ENDIF
+    ENDWHILE
+    CLOSEFILE FileName
+    RETURN FALSE
+ENDFUNCTION

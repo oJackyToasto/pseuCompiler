@@ -1,0 +1,39 @@
+
+DECLARE FileName : STRING
+FileName <- "password.txt"
+
+FUNCTION Login() RETURNS BOOL
+    DECLARE UserID : STRING, Password : STRING, ValidID <- FALSE : BOOL, Line : STRING, FoundID <- STRING, FoundPass <- STRING
+
+    WHILE NOT ValidID DO
+        INPUT UserID
+        OPENFILE FileName FOR READ
+
+        WHILE NOT ValidID AND NOT EOF(FileName) DO
+            READFILE FileName, Line
+            FoundID <- MID(Line, 1, 6)
+            FoundPass <- RIGHT(Line, 16)
+
+            IF FoundID = ID DO
+                ValidID <- TRUE
+            ENDIF
+        ENDWHILE
+
+        CLOSEFILE FileName
+
+        IF NOT ValidID DO
+            OUTPUT "Given id not found\nPlease re-enter your id: "
+        ENDIF
+    ENDWHILE
+
+    INPUT Password
+    Password <- Hash(Password)
+
+    IF Password = FoundPass DO
+        OUTPUT "Hello, Dear ", ID
+        RETURN TRUE
+    ELSE
+        OUTPUT "Invalid password for given id"
+        RETURN FALSE 
+    ENDIF
+ENDFUNCTION
