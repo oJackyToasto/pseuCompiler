@@ -109,7 +109,7 @@ fn test_expression_execute(input: &str) {
     match parser.parse_expression() {
         Ok(expr) => {
             println!("Parse Success!");
-            let interpreter = Interpreter::new();
+            let mut interpreter = Interpreter::new();
             match interpreter.evaluate_expr(&expr) {
                 Ok(value) => {
                     println!("Execution Success!");

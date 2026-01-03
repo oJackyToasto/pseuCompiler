@@ -3,7 +3,16 @@ use std::collections::HashMap;
 use log::*;
 use rand::Rng;
 
-use crate::{ast::{Expr, Function, Procedure, Stmt, Stmt::*, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*}, log_error};
+use crate::{ast::{Expr, Function, Procedure, Stmt, Stmt::*, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*, FileMode}, log_error};
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter, Read, Write, Seek, SeekFrom, BufRead};
+
+#[derive(Debug, Clone)]
+enum ControlFlow {
+    Return(Value),  // Return value from function
+}
+
+type InterpreterResult<T> = Result<T, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -36,6 +45,13 @@ pub enum Value {
     },
 }
 
+#[derive(Debug)]
+enum FileHandle {
+    Read(BufReader<File>),
+    Write(BufWriter<File>),
+    Random(File),  // For RANDOM mode - can both read and write
+}
+
 pub struct Interpreter {
     variables: HashMap<String, Value>,
     variables_type: HashMap<String, Type>,
@@ -43,6 +59,7 @@ pub struct Interpreter {
     procedures: HashMap<String, Procedure>,
 
     type_definitions: HashMap<String, Type>,
+    open_files: HashMap<String, FileHandle>,  // Maps filename to file handle
 }
 
 impl Interpreter {
@@ -53,6 +70,7 @@ impl Interpreter {
             functions: HashMap::new(),
             procedures: HashMap::new(),
             type_definitions: HashMap::new(),
+            open_files: HashMap::new(),
         }
     }
 
@@ -412,6 +430,337 @@ impl Interpreter {
                 }
                 Ok(())
             }
+            Stmt::FunctionDeclaration { function } => {
+                let func_name = function.name.clone();
+
+                if self.functions.contains_key(&func_name) {
+                    let msg = format!("Function {} already declared", func_name);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+
+                self.functions.insert(func_name, function.clone());
+                Ok(())
+            }
+            Stmt::ProcedureDeclaration { procedure } => {
+                let proc_name = procedure.name.clone();
+
+                if self.procedures.contains_key(&proc_name) {
+                    let msg = format!("Procedure {} already declared", proc_name);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+
+                self.procedures.insert(proc_name, procedure.clone());
+                Ok(())
+            }
+            Stmt::Call { name, args } => {
+                // Clone the procedure data we need before we need mutable access
+                let procedure = self.procedures.get(name)
+                    .ok_or_else(|| format!("Procedure {} not found", name))?
+                    .clone();  // Clone the entire procedure
+            
+                let arg_vals : Vec<Value> = if let Some(args_exprs) = args {
+                    args_exprs.iter()
+                        .map(|expr| self.evaluate_expr(expr))
+                        .collect::<Result<_, _>>()?
+                } else {
+                    Vec::new()
+                };
+            
+                if arg_vals.len() != procedure.params.len() {
+                    let msg = format!("Procedure {} expects {} arguments, got {}", name, procedure.params.len(), arg_vals.len());
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+            
+                let saved_vars = self.variables.clone();
+                let saved_vars_type = self.variables_type.clone();
+            
+                for (param, arg_val) in procedure.params.iter().zip(arg_vals) {
+                    self.variables.insert(param.name.clone(), arg_val.clone());
+                    self.variables_type.insert(param.name.clone(), param.type_name.clone());
+                }
+            
+                for stmt in &procedure.body {
+                    self.evaluate_stmt(stmt)?;
+                }
+            
+                self.variables = saved_vars;
+                self.variables_type = saved_vars_type;
+                Ok(())
+            }
+            Stmt::Return { value } => {
+                // RETURN should only be used inside functions
+                // This case handles RETURN in the main program (which is an error)
+                let msg = "RETURN statement outside of function".to_string();
+                log_error!("{}", msg);
+                Err(msg)
+            }
+
+            Stmt::OpenFile { filename, mode } => {
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("Filename must be a string, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+
+                if self.open_files.contains_key(&filename_str) {
+                    let msg = format!("File {} already open", filename_str);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+
+                let file: File = match mode {
+                    FileMode::READ => {
+                        OpenOptions::new().read(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for reading", filename_str))?
+                    }
+                    FileMode::WRITE => {
+                        OpenOptions::new().write(true).create(true).truncate(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for writing", filename_str))?
+                    }
+                    FileMode::RANDOM => {
+                        OpenOptions::new().read(true).write(true).create(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for random access", filename_str))?
+                    }
+                };
+
+                match mode {
+                    FileMode::READ => {
+                        self.open_files.insert(filename_str, FileHandle::Read(BufReader::new(file)));
+                    }
+                    FileMode::WRITE => {
+                        self.open_files.insert(filename_str, FileHandle::Write(BufWriter::new(file)));
+                    }
+                    FileMode::RANDOM => {
+                        self.open_files.insert(filename_str, FileHandle::Random(file));
+                    }
+                }
+                
+                Ok(())
+            }
+            Stmt::CloseFile { filename } => {
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("CLOSEFILE expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // Remove file from open_files (Rust will automatically close it)
+                if self.open_files.remove(&filename_str).is_none() {
+                    let msg = format!("File '{}' is not open", filename_str);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+                
+                Ok(())
+            }
+            Stmt::ReadFile { filename, name } => {
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("READFILE expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // Get file handle
+                let file_handle = self.open_files.get_mut(&filename_str)
+                    .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
+                
+                // Read a line from the file
+                let mut line = String::new();
+                match file_handle {
+                    FileHandle::Read(reader) => {
+                        reader.read_line(&mut line)
+                            .map_err(|e| format!("Failed to read from file '{}': {}", filename_str, e))?;
+                    },
+                    FileHandle::Random(file) => {
+                        // For random access files, read bytes until newline
+                        let mut buffer = vec![0u8; 1];
+                        loop {
+                            match file.read_exact(&mut buffer) {
+                                Ok(_) => {
+                                    let ch = buffer[0] as char;
+                                    if ch == '\n' {
+                                        break;
+                                    }
+                                    line.push(ch);
+                                },
+                                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                                    break; // End of file
+                                },
+                                Err(e) => {
+                                    return Err(format!("Failed to read from file '{}': {}", filename_str, e));
+                                }
+                            }
+                        }
+                    },
+                    FileHandle::Write(_) => {
+                        let msg = format!("Cannot read from file '{}' opened in WRITE mode", filename_str);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    },
+                }
+                
+                // Remove trailing newline
+                if line.ends_with('\n') {
+                    line.pop();
+                    if line.ends_with('\r') {
+                        line.pop();
+                    }
+                }
+                
+                // Store in variable
+                let var_type = self.variables_type.get(name)
+                    .ok_or_else(|| format!("Variable '{}' not found", name))?;
+                
+                // Ensure variable is STRING type
+                if !matches!(var_type, Type::STRING) {
+                    let msg = format!("READFILE variable '{}' must be STRING type", name);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+                
+                self.variables.insert(name.clone(), Value::String(line));
+                Ok(())
+            }
+            Stmt::WriteFile { filename, exprs } => {
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("WRITEFILE expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // Evaluate all expressions and convert to strings FIRST (before borrowing file handle)
+                let mut output = String::new();
+                for expr in exprs {
+                    let value = self.evaluate_expr(expr)?;
+                    output.push_str(&self.value_to_string(&value));
+                }
+                
+                // Get file handle AFTER evaluating expressions
+                let file_handle = self.open_files.get_mut(&filename_str)
+                    .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
+                
+                // Write to file
+                match file_handle {
+                    FileHandle::Write(writer) => {
+                        writer.write_all(output.as_bytes())
+                            .map_err(|e| format!("Failed to write to file '{}': {}", filename_str, e))?;
+                        writer.flush()
+                            .map_err(|e| format!("Failed to flush file '{}': {}", filename_str, e))?;
+                    },
+                    FileHandle::Random(file) => {
+                        file.write_all(output.as_bytes())
+                            .map_err(|e| format!("Failed to write to file '{}': {}", filename_str, e))?;
+                        file.flush()
+                            .map_err(|e| format!("Failed to flush file '{}': {}", filename_str, e))?;
+                    },
+                    FileHandle::Read(_) => {
+                        let msg = format!("Cannot write to file '{}' opened in READ mode", filename_str);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    },
+                }
+                
+                Ok(())
+            }
+            Stmt::Seek { filename, address } => {
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("SEEK expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                let address_val = self.evaluate_expr(address)?;
+                let address_int = match address_val {
+                    Value::Integer(i) => i,
+                    _ => {
+                        let msg = format!("SEEK expects INTEGER address, got {:?}", address_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // Get file handle (only RANDOM mode supports seek)
+                let file_handle = self.open_files.get_mut(&filename_str)
+                    .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
+                
+                match file_handle {
+                    FileHandle::Random(file) => {
+                        file.seek(SeekFrom::Start(address_int as u64))
+                            .map_err(|e| format!("Failed to seek in file '{}': {}", filename_str, e))?;
+                    },
+                    _ => {
+                        let msg = format!("SEEK only works with files opened in RANDOM mode");
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    },
+                }
+                
+                Ok(())
+            }
+            Stmt::GetRecord { filename, variable } => {
+                // GetRecord reads a fixed-length record (typically for binary/random access files)
+                // For simplicity, we'll treat it like ReadFile for now
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("GETRECORD expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // For now, treat GetRecord as ReadFile
+                // TODO: Implement proper record-based reading
+                self.evaluate_stmt(&Stmt::ReadFile {
+                    filename: Box::new(Expr::String(filename_str.clone())),
+                    name: variable.clone(),
+                })
+            }
+            Stmt::PutRecord { filename, variable } => {
+                // PutRecord writes a fixed-length record
+                // For simplicity, we'll treat it like WriteFile for now
+                let filename_val = self.evaluate_expr(filename)?;
+                let filename_str = match filename_val {
+                    Value::String(s) => s,
+                    _ => {
+                        let msg = format!("PUTRECORD expects STRING filename, got {:?}", filename_val);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                // Get variable value (not used but kept for future record implementation)
+                let _var_value = self.variables.get(variable)
+                    .ok_or_else(|| format!("Variable '{}' not found", variable))?;
+                
+                // For now, treat PutRecord as WriteFile
+                // TODO: Implement proper record-based writing
+                self.evaluate_stmt(&Stmt::WriteFile {
+                    filename: Box::new(Expr::String(filename_str)),
+                    exprs: vec![Expr::Variable(variable.clone())],
+                })
+            }
             _ => {
                 let msg = format!("Unsupported statement: {:?}", stmt);
                 log_error!("{}", msg);
@@ -485,7 +834,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate_expr(&self, expr: &Expr) -> Result<Value, String> {
+    pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
             Expr::Number(num) => {
                 if num.contains('.') {
@@ -522,12 +871,13 @@ impl Interpreter {
                 self.evaluate_function_call(name, &Some(args.clone()))
             }
             Expr::ArrayAccess { array, indices } => {
-                let array_val = self.variables.get(array)
-                    .ok_or_else(|| format!("Array {} not found", array))?;
-
+                // Evaluate indices first (before borrowing array)
                 let index_vals : Vec<Value> = indices.iter()
                     .map(|idx| self.evaluate_expr(idx))
                     .collect::<Result<_, _>>()?;
+
+                let array_val = self.variables.get(array)
+                    .ok_or_else(|| format!("Array {} not found", array))?;
 
                 let mut index_positions = Vec::new();
                 for idx_val in index_vals {
@@ -573,17 +923,77 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_function_call(&self, name: &str, args: &Option<Vec<Expr>>) -> Result<Value, String> {
+    fn evaluate_function_call(&mut self, name: &str, args: &Option<Vec<Expr>>) -> Result<Value, String> {
+        // Try built-in functions first
         if let Some(result) = self.evaluate_builtin_function(name, args) {
             return Ok(result);
         }
-
-        let msg = format!("Unknown function: {}", name);
-        log_error!("{}", msg);
-        Err(msg)
+        
+        // Try user-defined functions
+        let function = self.functions.get(name)
+            .ok_or_else(|| format!("Function '{}' not found", name))?
+            .clone();  // Clone to avoid borrow issues
+        
+        // Evaluate arguments
+        let arg_values: Vec<Value> = if let Some(arg_exprs) = args {
+            arg_exprs.iter()
+                .map(|expr| self.evaluate_expr(expr))
+                .collect::<Result<_, _>>()?
+        } else {
+            Vec::new()
+        };
+        
+        // Validate argument count
+        if arg_values.len() != function.params.len() {
+            let msg = format!(
+                "Function '{}' expects {} arguments, got {}",
+                name, function.params.len(), arg_values.len()
+            );
+            log_error!("{}", msg);
+            return Err(msg);
+        }
+        
+        // Save current variable state (for scoping)
+        let saved_variables = self.variables.clone();
+        let saved_variable_types = self.variables_type.clone();
+        
+        // Bind parameters to argument values
+        for (param, arg_value) in function.params.iter().zip(arg_values.iter()) {
+            self.variables.insert(param.name.clone(), arg_value.clone());
+            self.variables_type.insert(param.name.clone(), param.type_name.clone());
+        }
+        
+        // Execute function body
+        let mut return_value: Option<Value> = None;
+        for stmt in &function.body {
+            // Check if this is a RETURN statement
+            if let Stmt::Return { value } = stmt {
+                // Evaluate return expression if provided
+                return_value = Some(if let Some(expr) = value {
+                    self.evaluate_expr(expr)?
+                } else {
+                    // Default return value based on return type
+                    self.default_value(&function.return_type)?
+                });
+                break; // Exit function
+            } else {
+                // Execute other statements normally
+                self.evaluate_stmt(stmt)?;
+            }
+        }
+        
+        // Restore variable state
+        self.variables = saved_variables;
+        self.variables_type = saved_variable_types;
+        
+        // Return the value (or default if no RETURN statement)
+        Ok(return_value.unwrap_or_else(|| {
+            // If no RETURN statement, return default value for return type
+            self.default_value(&function.return_type).unwrap_or(Value::Integer(0))
+        }))
     }
 
-    fn evaluate_builtin_function(&self, name: &str, args: &Option<Vec<Expr>>) -> Option<Value> {
+    fn evaluate_builtin_function(&mut self, name: &str, args: &Option<Vec<Expr>>) -> Option<Value> {
         match name {
             "MOD" => {
                 let args_vec = args.as_ref()?;
@@ -829,11 +1239,30 @@ impl Interpreter {
                 let filename_val = self.evaluate_expr(&args_vec[0]).ok()?;
                 match filename_val {
                     Value::String(filename) => {
-                        // TODO: Need to track open file handles
-                        // For now, return an error indicating file handling not implemented
-                        let msg = format!("EOF not yet implemented - file handling required");
-                        log_error!("{}", msg);
-                        None
+                        // Check if file is open
+                        if let Some(file_handle) = self.open_files.get_mut(&filename) {
+                            // Check if we're at EOF
+                            match file_handle {
+                                FileHandle::Read(reader) => {
+                                    let buffer = reader.fill_buf().ok()?;
+                                    Some(Value::Boolean(buffer.is_empty()))
+                                },
+                                FileHandle::Random(file) => {
+                                    // For random access, check current position vs file size
+                                    let pos = file.stream_position().ok()?;
+                                    let metadata = file.metadata().ok()?;
+                                    Some(Value::Boolean(pos >= metadata.len()))
+                                },
+                                FileHandle::Write(_) => {
+                                    // Write mode - always false (can't be at EOF for writing)
+                                    Some(Value::Boolean(false))
+                                },
+                            }
+                        } else {
+                            let msg = format!("File '{}' is not open", filename);
+                            log_error!("{}", msg);
+                            None
+                        }
                     }
                     _ => {
                         let msg = format!("EOF expects STRING argument (filename), got {:?}", filename_val);
@@ -846,7 +1275,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_unary_op(&self, op: UnaryOp, expr: &Expr) -> Result<Value, String> {
+    fn evaluate_unary_op(&mut self, op: UnaryOp, expr: &Expr) -> Result<Value, String> {
         match op {
             Negate => {
                 let val = self.evaluate_expr(expr)?;

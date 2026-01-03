@@ -200,7 +200,7 @@ impl Lexer {
             "NOT" => Token::Not,
             "DECLARE" | "FUNCTION" | "RETURNS" | "FOR" | "WHILE" | "IF" | "TYPE" | "PROCEDURE"
             | "ELSE" | "DO" | "END" | "ENDFUNCTION" | "NEXT" | "ENDIF" | "ENDTYPE" | "ENDPROCEDURE"
-            | "ENDWHILE" | "BREAK" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT"
+            | "ENDWHILE" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT"
             | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD" | "TRUE" | "FALSE"
             | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND" | "RAND"
             | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE"

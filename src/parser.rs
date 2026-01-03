@@ -157,10 +157,6 @@ impl Parser {
                 "FUNCTION" => self.parse_function_declaration(),
                 "PROCEDURE" => self.parse_procedure_declaration(),
                 "CALL" => self.parse_call(),
-                "BREAK" => {
-                    self.advance();
-                    Ok(Stmt::Break)
-                },
                 "INPUT" => self.parse_input(),
                 "OUTPUT" => self.parse_output(),
                 "OPENFILE" => self.parse_openfile(),

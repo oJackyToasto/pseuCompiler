@@ -196,8 +196,6 @@ pub enum Stmt {
         value: Option<Box<Expr>>,
     },
 
-    Break,
-
     Call {
         name: String,
         args: Option<Vec<Expr>>,
