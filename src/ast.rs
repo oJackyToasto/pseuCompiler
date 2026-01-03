@@ -4,6 +4,7 @@ pub enum Expr {
     String(String),
     Char(String),
     Variable(String),
+    Boolean(bool),
     BinaryOp(Box<Expr>, BinaryOp, Box<Expr>),   
     UnaryOp(UnaryOp, Box<Expr>),
 

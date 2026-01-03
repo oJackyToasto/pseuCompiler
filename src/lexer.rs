@@ -201,10 +201,10 @@ impl Lexer {
             "DECLARE" | "FUNCTION" | "RETURNS" | "FOR" | "WHILE" | "IF" | "TYPE" | "PROCEDURE"
             | "ELSE" | "DO" | "END" | "ENDFUNCTION" | "NEXT" | "ENDIF" | "ENDTYPE" | "ENDPROCEDURE"
             | "ENDWHILE" | "BREAK" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT"
-            | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD"
-            | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND"
+            | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD" | "TRUE" | "FALSE"
+            | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND" | "RAND"
             | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE"
-            | "UCASE" | "LCASE" | "READ" | "WRITE" | "RANDOM" | "CASE" | "OTHERWISE" | "DIV"
+            | "UCASE" | "LCASE" | "READ" | "WRITE" | "RANDOM" | "CASE" | "OTHERWISE" | "DIV" | "INT"
             | "SUBSTRING" | "MID" | "RIGHT" | "EOF" => Token::Keyword(id),
             _ => Token::Identifier(id),
         }

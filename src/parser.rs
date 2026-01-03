@@ -737,6 +737,15 @@ impl Parser {
     
         let condition = self.parse_expression()?;
     
+        // Make DO optional - check if it's present and consume it if so
+        if matches!(self.current_token(), Token::Keyword(kw) if kw == "DO") {
+            self.advance();
+            // Skip newline after DO if present
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+        }
+    
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDWHILE") {
             // Skip leading newlines (whitespace)
@@ -1325,6 +1334,14 @@ impl Parser {
             Token::String(_) => self.parse_string(),
             Token::Char(_) => self.parse_char(),
             Token::Identifier(name) | Token::Keyword(name) => {
+                if name == "TRUE" {
+                    self.advance();
+                    return Ok(Expr::Boolean(true));
+                }
+                if name == "FALSE" {
+                    self.advance();
+                    return Ok(Expr::Boolean(false));
+                }
                 let var_name = name.clone();
                 self.advance();
                 

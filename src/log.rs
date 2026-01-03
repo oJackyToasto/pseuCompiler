@@ -1,6 +1,8 @@
 use log::{Level, LevelFilter};
 use std::io::Write;
 
+// TODO: Make it exe arguments at last
+
 /// Initialize the logger with a custom formatter
 pub fn init() {
     env_logger::Builder::from_default_env()
