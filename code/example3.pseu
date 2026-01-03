@@ -1,5 +1,5 @@
 DECLARE Alphabet[1:26] : ARRAY
-Alphabet <- ['A', 'B', ......]
+Alphabet <- ['A', 'B']
 
 FUNCTION FindRemainder(Input)
     //Declaring needed variables

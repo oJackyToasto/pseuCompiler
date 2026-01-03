@@ -88,23 +88,23 @@ pub enum FileMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
-    name: String,
-    params: Vec<Param>,
-    return_type: Type,
-    body: Vec<Stmt>,
+    pub name: String,
+    pub params: Vec<Param>,
+    pub return_type: Type,
+    pub body: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Procedure {
-    name: String,
-    params: Vec<Param>,
-    body: Vec<Stmt>,
+    pub name: String,
+    pub params: Vec<Param>,
+    pub body: Vec<Stmt>,
 }   
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
-    name: String,
-    type_name: Type,
+    pub name: String,
+    pub type_name: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -227,8 +227,8 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeField {
-    name: String,
-    type_name: Type,
+    pub name: String,
+    pub type_name: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]

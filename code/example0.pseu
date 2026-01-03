@@ -1,0 +1,387 @@
+// Comprehensive Example - Demonstrates All Language Features
+// This file showcases all keywords, statements, types, and operations
+
+// ============================================
+// TYPE DECLARATIONS
+// ============================================
+
+// Enum type
+TYPE Season = (Spring, Summer, Autumn, Winter)
+
+// Record type
+TYPE StudentRecord
+    DECLARE LastName : STRING
+    DECLARE FirstName : STRING
+    DECLARE DateOfBirth : DATE
+    DECLARE YearGroup : INTEGER
+    DECLARE FormGroup : CHAR
+ENDTYPE
+
+// Pointer type
+TYPE TIntPointer = ^INTEGER
+
+// Set type
+TYPE NumberSet = SET OF INTEGER
+
+// ============================================
+// VARIABLE DECLARATIONS
+// ============================================
+
+DECLARE Counter : INTEGER
+DECLARE Total <- 0 : INTEGER
+DECLARE Name <- "John" : STRING
+DECLARE Grade <- 'A' : CHAR
+DECLARE IsValid <- TRUE : BOOLEAN
+DECLARE Price <- 99.99 : REAL
+DECLARE BirthDate : DATE
+
+// Array declarations
+DECLARE Numbers[1:10] : ARRAY OF INTEGER
+DECLARE Matrix[1:5, 1:5] : ARRAY OF REAL
+DECLARE Names[1:100] : ARRAY OF STRING
+
+// Custom type declarations
+DECLARE Student1 : StudentRecord
+DECLARE Student2 : StudentRecord
+DECLARE CurrentSeason : Season
+DECLARE MyPointer : TIntPointer
+DECLARE MySet : NumberSet
+
+// ============================================
+// ARITHMETIC AND LOGICAL OPERATIONS
+// ============================================
+
+Counter <- 5 + 3 * 2
+Total <- (10 + 5) / 3
+Counter <- Counter MOD 4
+Counter <- 10 DIV 3
+Counter <- -Counter
+IsValid <- NOT IsValid
+IsValid <- (Counter > 5) AND (Counter < 10)
+IsValid <- (Counter = 5) OR (Counter = 10)
+IsValid <- Counter <> 0
+IsValid <- Counter >= 5
+IsValid <- Counter <= 10
+
+// ============================================
+// ARRAY OPERATIONS
+// ============================================
+
+Numbers[1] <- 42
+Numbers[Counter] <- Numbers[1] + 5
+Matrix[2, 3] <- 3.14
+Names[1] <- "Alice"
+Names[2] <- "Bob"
+
+// ============================================
+// FIELD ACCESS (Record Operations)
+// ============================================
+
+Student1.LastName <- "Smith"
+Student1.FirstName <- "John"
+Student1.YearGroup <- 10
+Student1.FormGroup <- 'A'
+Student2 <- Student1
+
+// ============================================
+// POINTER OPERATIONS
+// ============================================
+
+DECLARE Value <- 42 : INTEGER
+MyPointer <- ^Value
+Counter <- MyPointer^
+MyPointer^ <- 100
+
+// ============================================
+// IF STATEMENTS (with ELSE IF and ELSE)
+// ============================================
+
+IF Counter > 10 DO
+    OUTPUT "Counter is greater than 10"
+    Counter <- Counter - 1
+ENDIF
+
+IF Counter = 5 DO
+    OUTPUT "Counter is exactly 5"
+ELSE IF Counter < 5 DO
+    OUTPUT "Counter is less than 5"
+ELSE
+    OUTPUT "Counter is greater than 5"
+ENDIF
+
+// ============================================
+// WHILE LOOPS
+// ============================================
+
+WHILE Counter < 10 DO
+    OUTPUT Counter
+    Counter <- Counter + 1
+ENDWHILE
+
+// ============================================
+// FOR LOOPS (with and without STEP)
+// ============================================
+
+FOR i <- 1 TO 10 DO
+    Numbers[i] <- i * 2
+NEXT i
+
+FOR j <- 10 TO 1 STEP -1 DO
+    OUTPUT j
+NEXT j
+
+FOR k <- 0 TO 100 STEP 5 DO
+    Total <- Total + k
+NEXT k
+
+// ============================================
+// REPEAT...UNTIL LOOPS
+// ============================================
+
+REPEAT
+    INPUT Counter
+    OUTPUT "You entered: ", Counter
+UNTIL Counter > 0
+
+// ============================================
+// CASE STATEMENTS
+// ============================================
+
+CASE OF Counter
+    1: OUTPUT "One"
+    2: OUTPUT "Two"
+    3: OUTPUT "Three"
+    OTHERWISE: OUTPUT "Other number"
+ENDCASE
+
+CASE OF CurrentSeason
+    Spring: OUTPUT "It's spring!"
+    Summer: OUTPUT "It's summer!"
+    Autumn: OUTPUT "It's autumn!"
+    Winter: OUTPUT "It's winter!"
+    OTHERWISE: OUTPUT "Unknown season"
+ENDCASE
+
+// ============================================
+// INPUT AND OUTPUT STATEMENTS
+// ============================================
+
+INPUT Name
+INPUT Counter
+INPUT Price
+OUTPUT "Hello, ", Name
+OUTPUT "Counter is: ", Counter
+OUTPUT "Price is: ", Price
+OUTPUT Name, " is ", Counter, " years old"
+
+// ============================================
+// FILE OPERATIONS (Sequential Access)
+// ============================================
+
+DECLARE FileName <- "data.txt" : STRING
+DECLARE Line : STRING
+
+OPENFILE FileName FOR READ
+WHILE NOT EOF(FileName) DO
+    READFILE FileName, Line
+    OUTPUT Line
+ENDWHILE
+CLOSEFILE FileName
+
+OPENFILE FileName FOR WRITE
+WRITEFILE FileName, "Line 1"
+WRITEFILE FileName, "Line 2", Counter
+WRITEFILE FileName, Name, " ", Counter
+CLOSEFILE FileName
+
+// ============================================
+// FILE OPERATIONS (Random Access)
+// ============================================
+
+DECLARE RecordFile <- "records.dat" : STRING
+DECLARE RecordData : StudentRecord
+
+OPENFILE RecordFile FOR RANDOM
+SEEK RecordFile, 1
+GETRECORD RecordFile, RecordData
+RecordData.YearGroup <- RecordData.YearGroup + 1
+PUTRECORD RecordFile, RecordData
+SEEK RecordFile, 5
+GETRECORD RecordFile, RecordData
+CLOSEFILE RecordFile
+
+// ============================================
+// BUILT-IN FUNCTIONS
+// ============================================
+
+DECLARE Text <- "Hello World" : STRING
+DECLARE TextLength : INTEGER
+DECLARE UpperText : STRING
+DECLARE LowerText : STRING
+DECLARE SubStr : STRING
+DECLARE MidStr : STRING
+DECLARE RightStr : STRING
+
+TextLength <- LENGTH(Text)
+UpperText <- UCASE(Text)
+LowerText <- LCASE(Text)
+SubStr <- SUBSTRING(Text, 1, 5)
+MidStr <- MID(Text, 7, 5)
+RightStr <- RIGHT(Text, 5)
+
+Counter <- ROUND(Price)
+Counter <- MOD(100, 3)
+Counter <- 100 DIV 3
+
+// ============================================
+// BREAK STATEMENT
+// ============================================
+
+WHILE Counter < 100 DO
+    Counter <- Counter + 1
+    IF Counter = 50 DO
+        BREAK
+    ENDIF
+ENDWHILE
+
+FOR i <- 1 TO 100 DO
+    IF Numbers[i] = 42 DO
+        BREAK
+    ENDIF
+NEXT i
+
+// ============================================
+// FUNCTION DECLARATIONS
+// ============================================
+
+FUNCTION Add(a : INTEGER, b : INTEGER) RETURNS INTEGER
+    RETURN a + b
+ENDFUNCTION
+
+FUNCTION Multiply(x : REAL, y : REAL) RETURNS REAL
+    RETURN x * y
+ENDFUNCTION
+
+FUNCTION IsEven(n : INTEGER) RETURNS BOOLEAN
+    RETURN (n MOD 2) = 0
+ENDFUNCTION
+
+FUNCTION GetFullName(first : STRING, last : STRING) RETURNS STRING
+    RETURN first + " " + last
+ENDFUNCTION
+
+FUNCTION NoParams() RETURNS INTEGER
+    RETURN 42
+ENDFUNCTION
+
+// ============================================
+// PROCEDURE DECLARATIONS
+// ============================================
+
+PROCEDURE PrintHello()
+    OUTPUT "Hello, World!"
+ENDPROCEDURE
+
+PROCEDURE PrintMessage(msg : STRING)
+    OUTPUT msg
+ENDPROCEDURE
+
+PROCEDURE Swap(a : INTEGER, b : INTEGER)
+    DECLARE temp : INTEGER
+    temp <- a
+    a <- b
+    b <- temp
+ENDPROCEDURE
+
+PROCEDURE ProcessArray(arr : ARRAY OF INTEGER, size : INTEGER)
+    DECLARE i : INTEGER
+    FOR i <- 1 TO size DO
+        OUTPUT arr[i]
+    NEXT i
+ENDPROCEDURE
+
+PROCEDURE NoParamsProc()
+    OUTPUT "No parameters procedure"
+ENDPROCEDURE
+
+// ============================================
+// CALL STATEMENTS (Procedures)
+// ============================================
+
+CALL PrintHello()
+CALL PrintMessage("Hello from procedure!")
+CALL Swap(Counter, Total)
+CALL ProcessArray(Numbers, 10)
+CALL NoParamsProc
+
+// ============================================
+// FUNCTION CALLS (in expressions)
+// ============================================
+
+Total <- Add(5, 3)
+Price <- Multiply(10.5, 2.0)
+IsValid <- IsEven(8)
+Name <- GetFullName("John", "Doe")
+Counter <- NoParams()
+
+// Function calls in conditions
+IF IsEven(Counter) DO
+    OUTPUT "Counter is even"
+ENDIF
+
+// Function calls in loops
+FOR i <- 1 TO LENGTH(Text) DO
+    OUTPUT i
+NEXT i
+
+// ============================================
+// COMPLEX EXPRESSIONS WITH ALL OPERATORS
+// ============================================
+
+Counter <- (Add(5, 3) * 2) + (Counter MOD 4)
+IsValid <- (Counter > 5) AND (Counter < 10) OR (Counter = 0)
+Total <- ROUND(Price) + (Counter * 2) - (Total DIV 3)
+
+// ============================================
+// NESTED STRUCTURES
+// ============================================
+
+IF Counter > 0 DO
+    WHILE Counter < 10 DO
+        FOR i <- 1 TO 5 DO
+            IF Numbers[i] > 0 DO
+                OUTPUT Numbers[i]
+            ELSE
+                BREAK
+            ENDIF
+        NEXT i
+        Counter <- Counter + 1
+    ENDWHILE
+ENDIF
+
+// Nested function calls
+Counter <- Add(Multiply(2, 3), (10 / 2))
+Name <- GetFullName(UCASE("john"), LCASE("DOE"))
+
+// ============================================
+// COMPLETE EXAMPLE PROGRAM
+// ============================================
+
+DECLARE UserName : STRING
+DECLARE UserAge : INTEGER
+DECLARE IsAdult : BOOLEAN
+
+OUTPUT "Enter your name: "
+INPUT UserName
+OUTPUT "Enter your age: "
+INPUT UserAge
+
+IsAdult <- UserAge >= 18
+
+IF IsAdult DO
+    OUTPUT "Hello, ", UserName, "! You are an adult."
+ELSE
+    OUTPUT "Hello, ", UserName, "! You are a minor."
+ENDIF
+
+CALL PrintMessage("Program completed successfully!")

@@ -17,12 +17,12 @@ impl Parser {
         self.pos += 1;
         &self.tokens[self.pos]
     }
-
+    
     fn current_token(&self) -> &Token {
         if self.pos >= self.tokens.len() {
             &self.tokens[self.tokens.len() - 1]  // Return last token (EOF)
         } else {
-            &self.tokens[self.pos]
+        &self.tokens[self.pos]
         }
     }
     
@@ -108,7 +108,7 @@ impl Parser {
         }
     }
 
-    fn parse_statement(&mut self) -> Result<Stmt, String> {
+    pub fn parse_statement(&mut self) -> Result<Stmt, String> {
         match self.current_token() {
             Token::Keyword(kw) => match kw.as_str() {
                 "DECLARE" => self.parse_declare(),
@@ -339,7 +339,6 @@ impl Parser {
                         continue;
                     }
                     Token::RightParen => {
-                        self.advance();
                         break;
                     }
                     _ => return Err("Expected comma or closing parenthesis".to_string()),
@@ -547,7 +546,7 @@ impl Parser {
 
         let mut then_stmt = Vec::new();
 
-        while matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF" || kw == "ELSE") {
+        while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF" || kw == "ELSE") {
             then_stmt.push(self.parse_statement()?);
         }
 
@@ -559,7 +558,7 @@ impl Parser {
                 Some(vec![nested_if])
             } else {
                 let mut else_body = Vec::new();
-                while matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF") {
+                while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF") {
                     else_body.push(self.parse_statement()?);
                 }
                 Some(else_body)
@@ -1129,6 +1128,19 @@ impl Parser {
             left = Expr::BinaryOp(Box::new(left), op, Box::new(right));
         }
         Ok(left)
+    }
+
+    pub fn parse_program(&mut self) -> Result<Vec<Stmt>, String> {
+        let mut statements = Vec::new();
+        while !matches!(self.current_token(), Token::EOF) {
+            // Skip newlines between statements
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+                continue;
+            }
+            statements.push(self.parse_statement()?);
+        }
+        Ok(statements)
     }
 
     fn expect(&mut self, expected: Token) -> Result<(), String> {
