@@ -1,4 +1,4 @@
-FUNCTION CheckList(CheckName : STRING) RETURNS BOOL
+FUNCTION CheckList(CheckName : STRING) RETURNS BOOLEAN
     DECLARE Line : STRING, FileName <- "guestList.txt" : STRING
     OPENFILE FileName FOR READ
     WHILE NOT EOF(FileName) DO

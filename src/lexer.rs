@@ -1,8 +1,10 @@
-enum Token {
+#[derive(Debug, Clone, PartialEq)]  // Add Debug if not already there
+pub enum Token {
     Number(String),
     Identifier(String),
     String(String),
     Keyword(String),
+    Char(String),
 
     Plus,
     Minus,
@@ -13,6 +15,8 @@ enum Token {
     NotEquals,
     LessThan,
     GreaterThan,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
 
     And,
     Or,
@@ -27,9 +31,17 @@ enum Token {
     RightBracket,
     Comma,
     Colon,
-
+    Caret,
+    Dot,
+    
     Newline,
     EOF,
+}
+
+impl Token {
+    pub fn is_right_paren(&self) -> bool {
+        matches!(self, Token::RightParen)
+    }
 }
 
 pub struct Lexer {
@@ -49,12 +61,39 @@ impl Lexer {
         }
     }
 
+    pub fn tokenize(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
+        loop {
+            let token = self.next_token();
+            tokens.push(token.clone());  // Need Clone on Token enum
+            
+            if token == Token::EOF {
+                break;
+            }
+        }
+        tokens
+    }
+
     fn skip_whitespace(&mut self) {
         while self.pos < self.input.len() {
             match self.input[self.pos] {
                 ' ' | '\t' => {
                     self.pos += 1;
                     self.column += 1;
+                }
+                '/' => {
+                    // Check if it's a comment: //
+                    if self.pos + 1 < self.input.len() && self.input[self.pos + 1] == '/' {
+                        // Skip until newline
+                        while self.pos < self.input.len() {
+                            if self.input[self.pos] == '\n' || self.input[self.pos] == '\r' {
+                                break;
+                            }
+                            self.pos += 1;
+                        }
+                    } else {
+                        break; // It's a division operator, not a comment
+                    }
                 }
                 _ => break,
             }
@@ -125,10 +164,13 @@ impl Lexer {
             "AND" => Token::And,
             "OR" => Token::Or,
             "NOT" => Token::Not,
-            "DECLARE" | "FUNCTION" | "RETURNS" | "FOR" | "WHILE" | "IF" 
-            | "ELSE" | "DO" | "END" | "ENDFUNCTION" | "NEXT" | "ENDIF" 
-            | "ENDWHILE" | "BREAK" | "RETURN" | "INPUT" | "OUTPUT" 
-            | "OPENFILE" | "CLOSEFILE" | "READFILE" | "MOD" | "LENGTH" 
+            "DECLARE" | "FUNCTION" | "RETURNS" | "FOR" | "WHILE" | "IF" | "TYPE" | "PROCEDURE"
+            | "ELSE" | "DO" | "END" | "ENDFUNCTION" | "NEXT" | "ENDIF" | "ENDTYPE" | "ENDPROCEDURE"
+            | "ENDWHILE" | "BREAK" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT"
+            | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD"
+            | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND"
+            | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE"
+            | "UCASE" | "LCASE" | "READ" | "WRITE" | "RANDOM" | "CASE" | "OTHERWISE" | "DIV"
             | "SUBSTRING" | "MID" | "RIGHT" | "EOF" => Token::Keyword(id),
             _ => Token::Identifier(id),
         }
@@ -164,6 +206,13 @@ impl Lexer {
         Token::String(string)
     }   
 
+    fn read_char(&mut self) -> Token {
+        let mut char = String::new();
+        self.advance();
+        char.push(self.advance().unwrap());
+        Token::Char(char)
+    }
+
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
         
@@ -187,50 +236,48 @@ impl Lexer {
             return self.read_string();
         }
 
+        if ch == '\'' {
+            return self.read_char();
+        }
+
         if ch.is_ascii_digit() {
             return self.read_number();
         }
         
         if ch.is_ascii_alphabetic() {
-            self.read_id_or_kwd();
+            return self.read_id_or_kwd();
         }
-        if ch == '-' {
-            if self.peek_next() == Some('<') {
-                self.advance(); // consume '-'
-                self.advance(); // consume '<'
-                return Token::LeftArrow;
-            }
-            if self.peek_next() == Some('>') {
-                self.advance();
-                self.advance();
-                return Token::RightArrow;
-            }
-        }
-    
-        if ch == '=' && self.peek_next() == Some('=') {
+
+        if ch == '-' && self.peek_next() == Some('>') {    
             self.advance();
             self.advance();
-            return Token::Equals;
+            return Token::RightArrow;
         }
-    
-        if ch == '!' && self.peek_next() == Some('=') {
+
+        if ch == '<' && self.peek_next() == Some('-') {
+            self.advance();
+            self.advance();
+            return Token::LeftArrow;
+        }
+        
+        if ch == '<' && self.peek_next() == Some('>') {
             self.advance();
             self.advance();
             return Token::NotEquals;
         }
-    
+
         if ch == '<' && self.peek_next() == Some('=') {
             self.advance();
             self.advance();
-            return Token::LessThan;
+            return Token::LessThanOrEqual;
         }
-    
+
         if ch == '>' && self.peek_next() == Some('=') {
             self.advance();
             self.advance();
-            return Token::GreaterThan;
+            return Token::GreaterThanOrEqual;
         }
-    
+
         match ch {
             '+' => { self.advance(); Token::Plus }
             '-' => { self.advance(); Token::Minus }
@@ -245,6 +292,8 @@ impl Lexer {
             ']' => { self.advance(); Token::RightBracket }
             ',' => { self.advance(); Token::Comma }
             ':' => { self.advance(); Token::Colon }
+            '^' => { self.advance(); Token::Caret }
+            '.' => { self.advance(); Token::Dot }
             _ => {
                 let ch = self.advance().unwrap();
                 panic!("Unexpected character: '{}' at line {}:{}", ch, self.line, self.column);

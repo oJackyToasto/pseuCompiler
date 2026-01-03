@@ -6,13 +6,13 @@ FUNCTION FindRemainder(Input)
     DECLARE SingleChar : STRING, Sum : INTEGER
 
     //Looping through the Input from the user
-    FOR counter 1 -> LENGTH(Input) DO
+    FOR counter <- 1 TO LENGTH(Input) 
 
         //Getting the single character
         SingleChar <- SUBSTRING(counter, 1)
 
         //Searching the array for the single character
-        FOR alphacounter 1 -> 26 DO
+        FOR alphacounter <- 1 TO 26
             IF Alphabet[alphacounter] = SingleChar DO
                 Sum <- Sum + alphacounter
                 //Early break
