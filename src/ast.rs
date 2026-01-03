@@ -14,7 +14,7 @@ pub enum Expr {
 
     ArrayAccess {
         array: String,
-        index: Box<Expr>,
+        indices: Vec<Expr>,
     },
 
     FieldAccess {
@@ -129,7 +129,7 @@ pub enum Stmt {
 
     Assign {
         name: String,
-        index: Option<Box<Expr>>,
+        indices: Option<Vec<Expr>>,
         expression: Box<Expr>,
     },
 

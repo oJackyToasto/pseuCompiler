@@ -36,9 +36,9 @@ DECLARE Price <- 99.99 : REAL
 DECLARE BirthDate : DATE
 
 // Array declarations
-DECLARE Numbers[1:10] : ARRAY OF INTEGER
-DECLARE Matrix[1:5, 1:5] : ARRAY OF REAL
-DECLARE Names[1:100] : ARRAY OF STRING
+DECLARE Numbers : ARRAY[1:10] OF INTEGER 
+DECLARE Matrix : ARRAY[1:5, 1:5] OF REAL
+DECLARE Names : ARRAY[1:100] OF STRING
 
 // Custom type declarations
 DECLARE Student1 : StudentRecord
@@ -53,8 +53,8 @@ DECLARE MySet : NumberSet
 
 Counter <- 5 + 3 * 2
 Total <- (10 + 5) / 3
-Counter <- Counter MOD 4
-Counter <- 10 DIV 3
+Counter <- MOD(Counter, 4)
+Counter <- DIV(10, 3)
 Counter <- -Counter
 IsValid <- NOT IsValid
 IsValid <- (Counter > 5) AND (Counter < 10)
@@ -96,24 +96,25 @@ MyPointer^ <- 100
 // IF STATEMENTS (with ELSE IF and ELSE)
 // ============================================
 
-IF Counter > 10 DO
+IF Counter > 10 THEN
     OUTPUT "Counter is greater than 10"
     Counter <- Counter - 1
 ENDIF
 
-IF Counter = 5 DO
+IF Counter = 5 THEN
     OUTPUT "Counter is exactly 5"
-ELSE IF Counter < 5 DO
+ELSE IF Counter < 5 THEN
     OUTPUT "Counter is less than 5"
 ELSE
     OUTPUT "Counter is greater than 5"
+ENDIF
 ENDIF
 
 // ============================================
 // WHILE LOOPS
 // ============================================
 
-WHILE Counter < 10 DO
+WHILE Counter < 10
     OUTPUT Counter
     Counter <- Counter + 1
 ENDWHILE
@@ -122,15 +123,15 @@ ENDWHILE
 // FOR LOOPS (with and without STEP)
 // ============================================
 
-FOR i <- 1 TO 10 DO
+FOR i <- 1 TO 10
     Numbers[i] <- i * 2
 NEXT i
 
-FOR j <- 10 TO 1 STEP -1 DO
+FOR j <- 10 TO 1 STEP -1
     OUTPUT j
 NEXT j
 
-FOR k <- 0 TO 100 STEP 5 DO
+FOR k <- 0 TO 100 STEP 5
     Total <- Total + k
 NEXT k
 
@@ -182,7 +183,7 @@ DECLARE FileName <- "data.txt" : STRING
 DECLARE Line : STRING
 
 OPENFILE FileName FOR READ
-WHILE NOT EOF(FileName) DO
+WHILE NOT EOF(FileName)
     READFILE FileName, Line
     OUTPUT Line
 ENDWHILE
@@ -231,21 +232,21 @@ RightStr <- RIGHT(Text, 5)
 
 Counter <- ROUND(Price)
 Counter <- MOD(100, 3)
-Counter <- 100 DIV 3
+Counter <- DIV(100, 3)
 
 // ============================================
 // BREAK STATEMENT
 // ============================================
 
-WHILE Counter < 100 DO
+WHILE Counter < 100
     Counter <- Counter + 1
-    IF Counter = 50 DO
+    IF Counter = 50 THEN
         BREAK
     ENDIF
 ENDWHILE
 
-FOR i <- 1 TO 100 DO
-    IF Numbers[i] = 42 DO
+FOR i <- 1 TO 100
+    IF Numbers[i] = 42 THEN
         BREAK
     ENDIF
 NEXT i
@@ -263,7 +264,7 @@ FUNCTION Multiply(x : REAL, y : REAL) RETURNS REAL
 ENDFUNCTION
 
 FUNCTION IsEven(n : INTEGER) RETURNS BOOLEAN
-    RETURN (n MOD 2) = 0
+    RETURN (MOD(n, 2)) = 0
 ENDFUNCTION
 
 FUNCTION GetFullName(first : STRING, last : STRING) RETURNS STRING
@@ -295,7 +296,7 @@ ENDPROCEDURE
 
 PROCEDURE ProcessArray(arr : ARRAY OF INTEGER, size : INTEGER)
     DECLARE i : INTEGER
-    FOR i <- 1 TO size DO
+    FOR i <- 1 TO size
         OUTPUT arr[i]
     NEXT i
 ENDPROCEDURE
@@ -325,12 +326,12 @@ Name <- GetFullName("John", "Doe")
 Counter <- NoParams()
 
 // Function calls in conditions
-IF IsEven(Counter) DO
+IF IsEven(Counter) THEN
     OUTPUT "Counter is even"
 ENDIF
 
 // Function calls in loops
-FOR i <- 1 TO LENGTH(Text) DO
+FOR i <- 1 TO LENGTH(Text)
     OUTPUT i
 NEXT i
 
@@ -338,18 +339,18 @@ NEXT i
 // COMPLEX EXPRESSIONS WITH ALL OPERATORS
 // ============================================
 
-Counter <- (Add(5, 3) * 2) + (Counter MOD 4)
+Counter <- (Add(5, 3) * 2) + (MOD(Counter, 4))
 IsValid <- (Counter > 5) AND (Counter < 10) OR (Counter = 0)
-Total <- ROUND(Price) + (Counter * 2) - (Total DIV 3)
+Total <- ROUND(Price) + (Counter * 2) - (DIV(Total, 3))
 
 // ============================================
 // NESTED STRUCTURES
 // ============================================
 
-IF Counter > 0 DO
-    WHILE Counter < 10 DO
-        FOR i <- 1 TO 5 DO
-            IF Numbers[i] > 0 DO
+IF Counter > 0 THEN
+    WHILE Counter < 10
+        FOR i <- 1 TO 5
+            IF Numbers[i] > 0 THEN
                 OUTPUT Numbers[i]
             ELSE
                 BREAK
@@ -378,7 +379,7 @@ INPUT UserAge
 
 IsAdult <- UserAge >= 18
 
-IF IsAdult DO
+IF IsAdult THEN
     OUTPUT "Hello, ", UserName, "! You are an adult."
 ELSE
     OUTPUT "Hello, ", UserName, "! You are a minor."

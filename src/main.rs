@@ -76,7 +76,7 @@ fn test_file(filename: &str) {
     }
 }
 
-fn main() {
+fn test_stuff() {
     println!("\n{}", "=".repeat(60));
     println!("EXPRESSION TESTS");
     println!("{}", "=".repeat(60));
@@ -113,4 +113,8 @@ fn main() {
     test_statement("IF x > 5 THEN\n    OUTPUT x\nENDIF");
     test_statement("WHILE x < 10 DO\n    x <- x + 1\nENDWHILE");
     test_statement("FOR i <- 1 TO 10\n    OUTPUT i\nNEXT i");
+}
+
+fn main() {
+    test_file("code/example0.pseu");
 }

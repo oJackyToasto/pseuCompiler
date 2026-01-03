@@ -237,7 +237,22 @@ impl Parser {
         // Parse procedure body until ENDPROCEDURE
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDPROCEDURE") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDPROCEDURE") {
+                break;
+            }
+            
             body.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
         
         // Expect ENDPROCEDURE
@@ -382,7 +397,22 @@ impl Parser {
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDFUNCTION") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDFUNCTION") {
+                break;
+            }
+            
             body.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
 
         self.expect(Token::Keyword("ENDFUNCTION".to_string()))?;
@@ -466,41 +496,77 @@ impl Parser {
         
         // Check for different TYPE syntaxes
         match self.current_token() {
-            // TYPE <name> = (value1, value2, ...) - Enum
+            // TYPE <name> = ... - Can be Enum, Pointer, or Set
             Token::Equals => {
                 self.advance();
-                self.expect(Token::LeftParen)?;
                 
-                let mut values = Vec::new();
-                loop {
-                    match self.current_token() {
-                        Token::Identifier(v) | Token::Keyword(v) => {
-                            values.push(v.clone());
-                            self.advance();
-                        }
-                        _ => return Err(self.error_with_pos("Expected enum value")),
+                // Check what comes after =
+                match self.current_token() {
+                    // TYPE <name> = ^<type> - Pointer
+                    Token::Caret => {
+                        self.advance();
+                        let points_to = self.parse_type()?;
+                        
+                        Ok(Stmt::TypeDeclaration {
+                            name,
+                            variant: TypeDeclarationVariant::Pointer {
+                                points_to: Box::new(points_to),
+                            },
+                        })
                     }
                     
-                    match self.current_token() {
-                        Token::Comma => {
-                            self.advance();
-                            continue;
+                    // TYPE <name> = (value1, value2, ...) - Enum
+                    Token::LeftParen => {
+                        self.advance();
+                        
+                        let mut values = Vec::new();
+                        loop {
+                            match self.current_token() {
+                                Token::Identifier(v) | Token::Keyword(v) => {
+                                    values.push(v.clone());
+                                    self.advance();
+                                }
+                                _ => return Err(self.error_with_pos("Expected enum value")),
+                            }
+                            
+                            match self.current_token() {
+                                Token::Comma => {
+                                    self.advance();
+                                    continue;
+                                }
+                                Token::RightParen => {
+                                    self.advance();
+                                    break;
+                                }
+                                _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
+                            }
                         }
-                        Token::RightParen => {
-                            self.advance();
-                            break;
-                        }
-                        _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
+                        
+                        Ok(Stmt::TypeDeclaration {
+                            name,
+                            variant: TypeDeclarationVariant::Enum { values },
+                        })
                     }
+                    
+                    // TYPE <name> = SET OF <type> - Set
+                    Token::Keyword(kw) if kw == "SET" => {
+                        self.advance();
+                        self.expect(Token::Keyword("OF".to_string()))?;
+                        let element_type = self.parse_type()?;
+                        
+                        Ok(Stmt::TypeDeclaration {
+                            name,
+                            variant: TypeDeclarationVariant::Set {
+                                element_type: Box::new(element_type),
+                            },
+                        })
+                    }
+                    
+                    _ => return Err(self.error_with_pos("Expected ^, (, or SET after = in TYPE declaration")),
                 }
-                
-                Ok(Stmt::TypeDeclaration {
-                    name,
-                    variant: TypeDeclarationVariant::Enum { values },
-                })
             }
             
-            // TYPE <name> = ^<type> - Pointer
+            // TYPE <name> = ^<type> - Pointer (without =, direct syntax)
             Token::Caret => {
                 self.advance();
                 let points_to = self.parse_type()?;
@@ -513,7 +579,7 @@ impl Parser {
                 })
             }
             
-            // TYPE <name> = SET OF <type> - Set
+            // TYPE <name> = SET OF <type> - Set (without =, direct syntax)
             Token::Keyword(kw) if kw == "SET" => {
                 self.advance();
                 self.expect(Token::Keyword("OF".to_string()))?;
@@ -532,6 +598,16 @@ impl Parser {
                 let mut fields = Vec::new();
                 
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDTYPE") {
+                    // Skip leading newlines (whitespace)
+                    while matches!(self.current_token(), Token::Newline) {
+                        self.advance();
+                    }
+                    
+                    // Check if we hit the end keyword
+                    if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDTYPE") {
+                        break;
+                    }
+                    
                     if matches!(self.current_token(), Token::Keyword(kw) if kw == "DECLARE") {
                         self.advance();
                         
@@ -551,6 +627,11 @@ impl Parser {
                             name: field_name,
                             type_name: field_type,
                         });
+                        
+                        // Consume trailing newline after DECLARE statement
+                        if matches!(self.current_token(), Token::Newline) {
+                            self.advance();
+                        }
                     } else {
                         return Err(self.error_with_pos("Expected DECLARE or ENDTYPE"));
                     }
@@ -576,7 +657,22 @@ impl Parser {
         let mut then_stmt = Vec::new();
 
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF" || kw == "ELSE") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF" || kw == "ELSE") {
+                break;
+            }
+            
             then_stmt.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
 
         let else_stmt = if matches!(self.current_token(), Token::Keyword(kw) if kw == "ELSE") {
@@ -588,7 +684,22 @@ impl Parser {
             } else {
                 let mut else_body = Vec::new();
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF") {
+                    // Skip leading newlines (whitespace)
+                    while matches!(self.current_token(), Token::Newline) {
+                        self.advance();
+                    }
+                    
+                    // Check if we hit the end keyword
+                    if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF") {
+                        break;
+                    }
+                    
                     else_body.push(self.parse_statement()?);
+                    
+                    // Consume trailing newline (statement terminator)
+                    if matches!(self.current_token(), Token::Newline) {
+                        self.advance();
+                    }
                 }
                 Some(else_body)
             }
@@ -597,6 +708,12 @@ impl Parser {
         };
 
         self.expect(Token::Keyword("ENDIF".to_string()))?;
+        
+        // Skip a single newline after ENDIF (if present)
+        // This allows the outer IF to find its ENDIF when there's a nested IF
+        if matches!(self.current_token(), Token::Newline) {
+            self.advance();
+        }
 
         Ok(Stmt::If {
             condition: Box::new(condition),
@@ -609,11 +726,25 @@ impl Parser {
         self.expect(Token::Keyword("WHILE".to_string()))?;
     
         let condition = self.parse_expression()?;
-        self.expect(Token::Keyword("DO".to_string()))?;
     
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDWHILE") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDWHILE") {
+                break;
+            }
+            
             body.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
     
         self.expect(Token::Keyword("ENDWHILE".to_string()))?;
@@ -654,7 +785,22 @@ impl Parser {
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "NEXT") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "NEXT") {
+                break;
+            }
+            
             body.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
         
         self.expect(Token::Keyword("NEXT".to_string()))?;
@@ -686,7 +832,22 @@ impl Parser {
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "UNTIL") {
+            // Skip leading newlines (whitespace)
+            while matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
+            
+            // Check if we hit the end keyword
+            if matches!(self.current_token(), Token::Keyword(kw) if kw == "UNTIL") {
+                break;
+            }
+            
             body.push(self.parse_statement()?);
+            
+            // Consume trailing newline (statement terminator)
+            if matches!(self.current_token(), Token::Newline) {
+                self.advance();
+            }
         }
 
         self.expect(Token::Keyword("UNTIL".to_string()))?;
@@ -716,7 +877,22 @@ impl Parser {
                 
                 let mut otherwise_body = Vec::new();
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE") {
+                    // Skip leading newlines (whitespace)
+                    while matches!(self.current_token(), Token::Newline) {
+                        self.advance();
+                    }
+                    
+                    // Check if we hit the end keyword
+                    if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE") {
+                        break;
+                    }
+                    
                     otherwise_body.push(self.parse_statement()?);
+                    
+                    // Consume trailing newline (statement terminator)
+                    if matches!(self.current_token(), Token::Newline) {
+                        self.advance();
+                    }
                 }
                 otherwise = Some(otherwise_body);
                 break;
@@ -729,6 +905,16 @@ impl Parser {
             let mut body = Vec::new();
             
             while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE" || kw == "OTHERWISE") {
+                // Skip leading newlines (whitespace)
+                while matches!(self.current_token(), Token::Newline) {
+                    self.advance();
+                }
+                
+                // Check if we hit the end keyword
+                if matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE" || kw == "OTHERWISE") {
+                    break;
+                }
+                
                 let is_case_value = matches!(
                     self.current_token(),
                     Token::Identifier(_) | Token::Number(_) | Token::String(_) | Token::Char(_)
@@ -741,6 +927,11 @@ impl Parser {
                 }
                 
                 body.push(self.parse_statement()?);
+                
+                // Consume trailing newline (statement terminator)
+                if matches!(self.current_token(), Token::Newline) {
+                    self.advance();
+                }
             }
             
             cases.push(CaseBranch {
@@ -759,6 +950,7 @@ impl Parser {
     }
 
     fn parse_assignment(&mut self) -> Result<Stmt, String> {
+        // Parse the left-hand side (lvalue) - can be variable, array access, field access, or pointer dereference
         let name = match self.current_token() {
             Token::Identifier(n) => {
                 let var_name = n.clone();
@@ -768,23 +960,69 @@ impl Parser {
             _ => return Err(self.error_with_pos("Expected identifier")),
         };
 
-        let has_index = matches!(self.current_token(), Token::LeftBracket);
-        let index = if has_index {
+        // Check for array access, field access, or pointer dereference
+        let mut indices = None;
+        
+        // Handle array access: arr[i] or arr[i, j]
+        if matches!(self.current_token(), Token::LeftBracket) {
             self.advance();
-            let idx = self.parse_expression()?;
+            let mut idxs = Vec::new();
+            
+            // Parse first index
+            idxs.push(self.parse_expression()?);
+            
+            // Parse additional comma-separated indices
+            while matches!(self.current_token(), Token::Comma) {
+                self.advance();
+                idxs.push(self.parse_expression()?);
+            }
+            
             self.expect(Token::RightBracket)?;
-            Some(Box::new(idx))
+            indices = Some(idxs);
+        }
+        
+        // Handle field access: obj.field
+        // Note: Field access assignments like Student1.LastName <- "Smith" need special handling
+        // We'll check if there's a dot after the identifier (or after array access)
+        let field_name = if matches!(self.current_token(), Token::Dot) {
+            self.advance();
+            match self.current_token() {
+                Token::Identifier(f) => {
+                    let f = f.clone();
+                    self.advance();
+                    Some(f)
+                }
+                _ => return Err(self.error_with_pos("Expected field name after dot")),
+            }
         } else {
             None
+        };
+        
+        // Handle pointer dereference: ptr^
+        let is_pointer_deref = if matches!(self.current_token(), Token::Caret) {
+            self.advance();
+            true
+        } else {
+            false
         };
 
         self.expect(Token::LeftArrow)?;
 
         let value = self.parse_expression()?;
 
+        // For now, we'll store field access and pointer dereference in the name field
+        // This is a simplification - in a full implementation, you might want separate AST nodes
+        let final_name = if let Some(field) = field_name {
+            format!("{}.{}", name, field)
+        } else if is_pointer_deref {
+            format!("{}^", name)
+        } else {
+            name
+        };
+
         Ok(Stmt::Assign {
-            name,
-            index,
+            name: final_name,
+            indices,
             expression: Box::new(value),
         })
     }
@@ -865,13 +1103,36 @@ impl Parser {
     
                 let mut dimensions = Vec::new();
     
+                // Parse array dimensions - can be [1:5][1:5] or [1:5, 1:5]
                 while matches!(self.current_token(), Token::LeftBracket) {
                     self.advance();
-                    let start = self.parse_expression()?;
-                    self.expect(Token::Comma)?;
-                    let end = self.parse_expression()?;
-                    self.expect(Token::RightBracket)?;
-                    dimensions.push((Box::new(start), Box::new(end)));
+                    
+                    // Parse first dimension in this bracket
+                    loop {
+                        let start = self.parse_expression()?;
+                        // Accept either colon (:) or comma (,) for array bounds
+                        match self.current_token() {
+                            Token::Colon | Token::Comma => {
+                                self.advance();
+                            }
+                            _ => return Err(self.error_with_pos("Expected colon or comma between array bounds")),
+                        }
+                        let end = self.parse_expression()?;
+                        dimensions.push((Box::new(start), Box::new(end)));
+                        
+                        // Check if there's another dimension in the same bracket (comma-separated)
+                        match self.current_token() {
+                            Token::Comma => {
+                                self.advance();
+                                continue; // Parse another dimension
+                            }
+                            Token::RightBracket => {
+                                self.advance();
+                                break; // Close this bracket
+                            }
+                            _ => return Err(self.error_with_pos("Expected comma or closing bracket after array dimension")),
+                        }
+                    }
                 }
     
                 self.expect(Token::Keyword("OF".to_string()))?;
@@ -1118,9 +1379,19 @@ impl Parser {
 
     fn parse_array_access(&mut self, name: String) -> Result<Expr, String> {
         self.expect(Token::LeftBracket)?;
-        let index = self.parse_expression()?;
+        let mut indices = Vec::new();
+        
+        // Parse first index
+        indices.push(self.parse_expression()?);
+        
+        // Parse additional comma-separated indices
+        while matches!(self.current_token(), Token::Comma) {
+            self.advance();
+            indices.push(self.parse_expression()?);
+        }
+        
         self.expect(Token::RightBracket)?;
-        Ok(Expr::ArrayAccess { array: name, index: Box::new(index) })
+        Ok(Expr::ArrayAccess { array: name, indices })
     }
 
     fn parse_function_call_args(&mut self) -> Result<Vec<Expr>, String> {
@@ -1141,6 +1412,10 @@ impl Parser {
     }
 
     pub fn parse_expression(&mut self) -> Result<Expr, String> {
+        // Skip leading newlines before parsing expression
+        while matches!(self.current_token(), Token::Newline) {
+            self.advance();
+        }
         self.parse_binary_expression(0) 
     }
 

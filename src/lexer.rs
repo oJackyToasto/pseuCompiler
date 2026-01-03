@@ -235,8 +235,11 @@ impl Lexer {
 
     fn read_char(&mut self) -> Token {
         let mut char = String::new();
-        self.advance();
-        char.push(self.advance().unwrap());
+        self.advance(); // Skip opening quote
+        char.push(self.advance().unwrap()); // Read the character
+        if let Some('\'') = self.peek() {
+            self.advance(); // Skip closing quote
+        }
         Token::Char(char)
     }
 
