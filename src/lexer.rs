@@ -1,3 +1,5 @@
+use log::{debug, trace, error};
+
 #[derive(Debug, Clone, PartialEq)]  // Add Debug if not already there
 pub enum Token {
     Number(String),
@@ -82,12 +84,16 @@ impl Lexer {
     }
     
     pub fn tokenize_with_pos(&mut self) -> Vec<TokenWithPos> {
+        debug!("Starting tokenization");
         let mut tokens = Vec::new();
         loop {
             // Capture position BEFORE calling next_token (which may advance line/column)
             let line = self.line;
             let column = self.column;
             let token = self.next_token();
+            
+            trace!("Tokenized: {:?} at {}:{}", token, line, column);
+            
             tokens.push(TokenWithPos {
                 token: token.clone(),
                 line,
@@ -95,6 +101,7 @@ impl Lexer {
             });
             
             if token == Token::EOF {
+                debug!("Tokenization complete. Total tokens: {}", tokens.len());
                 break;
             }
         }
@@ -326,7 +333,9 @@ impl Lexer {
             '.' => { self.advance(); Token::Dot }
             _ => {
                 let ch = self.advance().unwrap();
-                panic!("Unexpected character: '{}' at line {}:{}", ch, self.line, self.column);
+                let msg = format!("Unexpected character: '{}' at line {}:{}", ch, self.line, self.column);
+                error!("{}", msg);
+                panic!("{}", msg);
             }
         }
     }

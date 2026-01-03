@@ -1,6 +1,7 @@
 mod lexer;
 mod parser;
 mod ast;
+mod log;
 
 use parser::Parser;
 use std::fs;
@@ -116,5 +117,14 @@ fn test_stuff() {
 }
 
 fn main() {
+    // Initialize logger
+    log::init();
+    
+    // Set log level via environment variable if not set
+    // RUST_LOG=debug cargo run  (for debug output - shows parsing steps)
+    // RUST_LOG=trace cargo run  (for trace output - shows all tokens and steps)
+    // RUST_LOG=info cargo run   (for info output, default - shows milestones)
+    // RUST_LOG=warn cargo run    (for warnings and errors only)
+    
     test_file("code/example0.pseu");
 }

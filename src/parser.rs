@@ -1,5 +1,6 @@
 use crate::ast::{Expr, BinaryOp, UnaryOp, Stmt, Type, FileMode, CaseBranch, TypeDeclarationVariant, TypeField, Function, Param, Procedure};
 use crate::lexer::{Token, Lexer, TokenWithPos};
+use log::{debug, trace, error, info};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -9,6 +10,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(input: &str) -> Self {
+        debug!("Initializing parser");
         let mut lexer = Lexer::new(input);
         let tokens_with_pos = lexer.tokenize_with_pos();
         
@@ -19,6 +21,8 @@ impl Parser {
             positions.push((line, column));
             tokens.push(token);
         }
+        
+        debug!("Parser initialized with {} tokens", tokens.len());
         
         Parser { 
             tokens, 
@@ -39,7 +43,9 @@ impl Parser {
     
     fn error_with_pos(&self, msg: &str) -> String {
         let (line, column) = self.get_position();
-        format!("{} at line {}:{}", msg, line, column)
+        let error_msg = format!("{} at line {}:{}", msg, line, column);
+        error!("Parse error: {}", error_msg);
+        error_msg
     }
 
     fn next_token(&mut self) -> &Token {
@@ -138,6 +144,7 @@ impl Parser {
     }
 
     pub fn parse_statement(&mut self) -> Result<Stmt, String> {
+        trace!("Parsing statement, current token: {:?}", self.current_token());
         match self.current_token() {
             Token::Keyword(kw) => match kw.as_str() {
                 "DECLARE" => self.parse_declare(),
@@ -175,6 +182,7 @@ impl Parser {
     }
 
     fn parse_procedure_declaration(&mut self) -> Result<Stmt, String> {
+        trace!("Parsing PROCEDURE declaration");
         self.expect(Token::Keyword("PROCEDURE".to_string()))?;
         
         // Parse procedure name
@@ -342,6 +350,7 @@ impl Parser {
     }
 
     fn parse_function_declaration(&mut self) -> Result<Stmt, String> {
+        trace!("Parsing FUNCTION declaration");
         self.expect(Token::Keyword("FUNCTION".to_string()))?;
 
         let name = match self.current_token() {
@@ -483,6 +492,7 @@ impl Parser {
     }
 
     fn parse_type_declaration(&mut self) -> Result<Stmt, String> {
+        trace!("Parsing TYPE declaration");
         self.expect(Token::Keyword("TYPE".to_string()))?;
         
         let name = match self.current_token() {
@@ -1412,6 +1422,7 @@ impl Parser {
     }
 
     pub fn parse_expression(&mut self) -> Result<Expr, String> {
+        trace!("Parsing expression, current token: {:?}", self.current_token());
         // Skip leading newlines before parsing expression
         while matches!(self.current_token(), Token::Newline) {
             self.advance();
@@ -1435,6 +1446,7 @@ impl Parser {
     }
 
     pub fn parse_program(&mut self) -> Result<Vec<Stmt>, String> {
+        info!("Starting program parsing");
         let mut statements = Vec::new();
         while !matches!(self.current_token(), Token::EOF) {
             // Skip newlines between statements
@@ -1442,16 +1454,21 @@ impl Parser {
                 self.advance();
                 continue;
             }
+            trace!("Parsing statement at position {}", self.pos);
             statements.push(self.parse_statement()?);
         }
+        info!("Program parsing complete. Parsed {} statement(s)", statements.len());
         Ok(statements)
     }
 
     fn expect(&mut self, expected: Token) -> Result<(), String> {
         if self.current_token() == &expected {
+            trace!("Matched expected token: {:?}", expected);
             self.advance();
             Ok(())
         } else {
+            let (line, column) = self.get_position();
+            error!("Expected {:?}, found {:?} at {}:{}", expected, self.current_token(), line, column);
             Err(self.error_with_pos(&format!("Expected {:?}, found {:?}", expected, self.current_token())))
         }
     }
