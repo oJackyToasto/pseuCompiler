@@ -51,6 +51,13 @@ pub struct Lexer {
     column: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct TokenWithPos {
+    pub token: Token,
+    pub line: usize,
+    pub column: usize,
+}
+
 impl Lexer {
     pub fn new(input: &str) -> Self {
         Self {
@@ -66,6 +73,26 @@ impl Lexer {
         loop {
             let token = self.next_token();
             tokens.push(token.clone());  // Need Clone on Token enum
+            
+            if token == Token::EOF {
+                break;
+            }
+        }
+        tokens
+    }
+    
+    pub fn tokenize_with_pos(&mut self) -> Vec<TokenWithPos> {
+        let mut tokens = Vec::new();
+        loop {
+            // Capture position BEFORE calling next_token (which may advance line/column)
+            let line = self.line;
+            let column = self.column;
+            let token = self.next_token();
+            tokens.push(TokenWithPos {
+                token: token.clone(),
+                line,
+                column,
+            });
             
             if token == Token::EOF {
                 break;

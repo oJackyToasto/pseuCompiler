@@ -1,16 +1,45 @@
 use crate::ast::{Expr, BinaryOp, UnaryOp, Stmt, Type, FileMode, CaseBranch, TypeDeclarationVariant, TypeField, Function, Param, Procedure};
-use crate::lexer::{Token, Lexer};
+use crate::lexer::{Token, Lexer, TokenWithPos};
 
 pub struct Parser {
     tokens: Vec<Token>,
+    token_positions: Vec<(usize, usize)>, // (line, column) for each token
     pos: usize,
 }
 
 impl Parser {
     pub fn new(input: &str) -> Self {
         let mut lexer = Lexer::new(input);
-        let tokens = lexer.tokenize();
-        Parser { tokens, pos: 0 }
+        let tokens_with_pos = lexer.tokenize_with_pos();
+        
+        let mut tokens = Vec::new();
+        let mut positions = Vec::new();
+        
+        for TokenWithPos { token, line, column } in tokens_with_pos {
+            positions.push((line, column));
+            tokens.push(token);
+        }
+        
+        Parser { 
+            tokens, 
+            token_positions: positions,
+            pos: 0,
+        }
+    }
+    
+    fn get_position(&self) -> (usize, usize) {
+        if self.pos < self.token_positions.len() {
+            self.token_positions[self.pos]
+        } else if !self.token_positions.is_empty() {
+            self.token_positions[self.token_positions.len() - 1]
+        } else {
+            (1, 1)
+        }
+    }
+    
+    fn error_with_pos(&self, msg: &str) -> String {
+        let (line, column) = self.get_position();
+        format!("{} at line {}:{}", msg, line, column)
     }
 
     fn next_token(&mut self) -> &Token {
@@ -36,7 +65,7 @@ impl Parser {
             self.advance();
             Ok(Expr::Number(number))
         } else {
-            Err("Expected number".to_string())
+            Err(self.error_with_pos("Expected number"))
         }
     }
 
@@ -47,7 +76,7 @@ impl Parser {
                 self.advance();
                 Ok(Expr::String(string))
             }
-            _ => Err("Expected string".to_string()),
+            _ => Err(self.error_with_pos("Expected string")),
         }
     }
 
@@ -58,7 +87,7 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Variable(variable))
             }
-            _ => Err("Expected variable".to_string()),
+            _ => Err(self.error_with_pos("Expected variable")),
         }
     }
 
@@ -69,7 +98,7 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Char(char))
             }
-            _ => Err("Expected char".to_string()),
+            _ => Err(self.error_with_pos("Expected char")),
         }
     }
 
@@ -135,13 +164,13 @@ impl Parser {
                 "GETRECORD" => self.parse_getrecord(),
                 "PUTRECORD" => self.parse_putrecord(),
                 "RETURN" => self.parse_return(),
-                _ => Err(format!("Unexpected keyword: {}", kw)),
+                _ => Err(self.error_with_pos(&format!("Unexpected keyword: {}", kw))),
             }
 
             Token::Identifier(_) => {
                 self.parse_assignment()
             },
-            _ => Err("Expected statement".to_string()),
+            _ => Err(self.error_with_pos("Expected statement")),
         }
     }
 
@@ -155,7 +184,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected procedure name".to_string()),
+            _ => return Err(self.error_with_pos("Expected procedure name")),
         };
         
         // Expect opening parenthesis
@@ -174,7 +203,7 @@ impl Parser {
                         self.advance();
                         name
                     }
-                    _ => return Err("Expected parameter name".to_string()),
+                    _ => return Err(self.error_with_pos("Expected parameter name")),
                 };
                 
                 // Expect colon
@@ -197,7 +226,7 @@ impl Parser {
                     Token::RightParen => {
                         break;
                     }
-                    _ => return Err("Expected comma or closing parenthesis".to_string()),
+                    _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
                 }
             }
         }
@@ -233,7 +262,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected procedure name after CALL".to_string()),
+            _ => return Err(self.error_with_pos("Expected procedure name after CALL")),
         };
         
         // Check for arguments
@@ -261,7 +290,7 @@ impl Parser {
                                 self.advance();
                                 break;
                             }
-                            _ => return Err("Expected comma or closing parenthesis in CALL arguments".to_string()),
+                            _ => return Err(self.error_with_pos("Expected comma or closing parenthesis in CALL arguments")),
                         }
                     }
                     Some(args)
@@ -306,7 +335,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected function name".to_string()),
+            _ => return Err(self.error_with_pos("Expected function name")),
         };
         
         self.expect(Token::LeftParen)?;
@@ -321,7 +350,7 @@ impl Parser {
                         self.advance();
                         name
                     }
-                    _ => return Err("Expected parameter name".to_string()),
+                    _ => return Err(self.error_with_pos("Expected parameter name")),
                 };
                 
                 self.expect(Token::Colon)?;
@@ -341,7 +370,7 @@ impl Parser {
                     Token::RightParen => {
                         break;
                     }
-                    _ => return Err("Expected comma or closing parenthesis".to_string()),
+                    _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
                 }
             }
         }
@@ -377,7 +406,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected identifier after DEFINE".to_string()),
+            _ => return Err(self.error_with_pos("Expected identifier after DEFINE")),
         };
         
         self.expect(Token::LeftParen)?;
@@ -389,7 +418,7 @@ impl Parser {
                     values.push(v.clone());
                     self.advance();
                 }
-                _ => return Err("Expected enum value".to_string()),
+                _ => return Err(self.error_with_pos("Expected enum value")),
             }
             
             match self.current_token() {
@@ -401,7 +430,7 @@ impl Parser {
                     self.advance();
                     break;
                 }
-                _ => return Err("Expected comma or closing parenthesis".to_string()),
+                _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
             }
         }
         
@@ -413,7 +442,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected type name".to_string()),
+            _ => return Err(self.error_with_pos("Expected type name")),
         };
         
         Ok(Stmt::Define {
@@ -432,7 +461,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected type name".to_string()),
+            _ => return Err(self.error_with_pos("Expected type name")),
         };
         
         // Check for different TYPE syntaxes
@@ -449,7 +478,7 @@ impl Parser {
                             values.push(v.clone());
                             self.advance();
                         }
-                        _ => return Err("Expected enum value".to_string()),
+                        _ => return Err(self.error_with_pos("Expected enum value")),
                     }
                     
                     match self.current_token() {
@@ -461,7 +490,7 @@ impl Parser {
                             self.advance();
                             break;
                         }
-                        _ => return Err("Expected comma or closing parenthesis".to_string()),
+                        _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
                     }
                 }
                 
@@ -512,7 +541,7 @@ impl Parser {
                                 self.advance();
                                 name
                             }
-                            _ => return Err("Expected field name".to_string()),
+                            _ => return Err(self.error_with_pos("Expected field name")),
                         };
                         
                         self.expect(Token::Colon)?;
@@ -523,7 +552,7 @@ impl Parser {
                             type_name: field_type,
                         });
                     } else {
-                        return Err("Expected DECLARE or ENDTYPE".to_string());
+                        return Err(self.error_with_pos("Expected DECLARE or ENDTYPE"));
                     }
                 }
                 
@@ -542,7 +571,7 @@ impl Parser {
 
         let condition = self.parse_expression()?;
 
-        self.expect(Token::Keyword("DO".to_string()))?;
+        self.expect(Token::Keyword("THEN".to_string()))?;
 
         let mut then_stmt = Vec::new();
 
@@ -605,7 +634,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected counter variable name in FOR loop".to_string()),
+            _ => return Err(self.error_with_pos("Expected counter variable name in FOR loop")),
         };
         
         self.expect(Token::LeftArrow)?;
@@ -636,11 +665,11 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected counter variable name after NEXT".to_string()),
+            _ => return Err(self.error_with_pos("Expected counter variable name after NEXT")),
         };
         
         if next_counter != counter {
-            return Err(format!("NEXT counter '{}' does not match FOR counter '{}'", next_counter, counter));
+            return Err(self.error_with_pos(&format!("NEXT counter '{}' does not match FOR counter '{}'", next_counter, counter)));
         }
         
         Ok(Stmt::For {
@@ -736,7 +765,7 @@ impl Parser {
                 self.advance();
                 var_name
             },
-            _ => return Err("Expected identifier".to_string()),
+            _ => return Err(self.error_with_pos("Expected identifier")),
         };
 
         let has_index = matches!(self.current_token(), Token::LeftBracket);
@@ -769,7 +798,7 @@ impl Parser {
                 self.advance();
                 Ok(Stmt::Input { name })
             }
-            _ => Err("Expected identifier".to_string()),
+            _ => Err(self.error_with_pos("Expected identifier")),
         }
     }
         
@@ -808,7 +837,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected identifier".to_string()),
+            _ => return Err(self.error_with_pos("Expected identifier")),
         };
         
         let initial_value = if matches!(self.current_token(), Token::LeftArrow) {
@@ -878,11 +907,11 @@ impl Parser {
                 "CHAR" => Ok(Type::CHAR),
                 "BOOLEAN" | "BOOL" => Ok(Type::BOOLEAN),
                 "DATE" => Ok(Type::DATE),
-                _ => Err(format!("Unknown type: {}", kw_str)),
+                _ => Err(self.error_with_pos(&format!("Unknown type: {}", kw_str))),
             };
         }
         
-        Err("Expected type".to_string())
+        Err(self.error_with_pos("Expected type"))
     }
 
     fn parse_openfile(&mut self) -> Result<Stmt, String> {
@@ -900,10 +929,10 @@ impl Parser {
                     "READ" => FileMode::READ,
                     "WRITE" => FileMode::WRITE,
                     "RANDOM" => FileMode::RANDOM,
-                    _ => return Err(format!("Expected READ, WRITE, or RANDOM, found {}", kw_str)),
+                    _ => return Err(self.error_with_pos(&format!("Expected READ, WRITE, or RANDOM, found {}", kw_str))),
                 }
             }
-            _ => return Err("Expected READ, WRITE, or RANDOM after FOR".to_string()),
+            _ => return Err(self.error_with_pos("Expected READ, WRITE, or RANDOM after FOR")),
         };
         
         Ok(Stmt::OpenFile {
@@ -934,7 +963,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected variable name after comma in READFILE".to_string()),
+            _ => return Err(self.error_with_pos("Expected variable name after comma in READFILE")),
         };
         
         Ok(Stmt::ReadFile {
@@ -989,7 +1018,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected variable name after comma in GETRECORD".to_string()),
+            _ => return Err(self.error_with_pos("Expected variable name after comma in GETRECORD")),
         };
         
         Ok(Stmt::GetRecord {
@@ -1010,7 +1039,7 @@ impl Parser {
                 self.advance();
                 name
             }
-            _ => return Err("Expected variable name after comma in PUTRECORD".to_string()),
+            _ => return Err(self.error_with_pos("Expected variable name after comma in PUTRECORD")),
         };
         
         Ok(Stmt::PutRecord {
@@ -1037,7 +1066,7 @@ impl Parser {
                             self.advance();
                             f
                         }
-                        _ => return Err("Expected field name after dot".to_string()),
+                        _ => return Err(self.error_with_pos("Expected field name after dot")),
                     };
                     return Ok(Expr::FieldAccess {
                         object: Box::new(Expr::Variable(var_name)),
@@ -1076,7 +1105,7 @@ impl Parser {
                     target: Box::new(target),
                 })
             }
-            _ => Err("Expected primary expression".to_string()),
+            _ => Err(self.error_with_pos("Expected primary expression")),
         }
     }
 
@@ -1148,7 +1177,7 @@ impl Parser {
             self.advance();
             Ok(())
         } else {
-            Err(format!("Expected {:?}, found {:?}", expected, self.current_token()))
+            Err(self.error_with_pos(&format!("Expected {:?}, found {:?}", expected, self.current_token())))
         }
     }
 }

@@ -17,7 +17,7 @@ fn test_expression(input: &str) {
             println!("AST:\n{:#?}", expr);
         }
         Err(e) => {
-            println!("❌ Error: {}", e);
+            println!("Error: {}", e);
         }
     }
 }
@@ -31,11 +31,11 @@ fn test_statement(input: &str) {
     let mut parser = Parser::new(input);
     match parser.parse_statement() {
         Ok(stmt) => {
-            println!("✅ Success!");
+            println!("Success!");
             println!("AST:\n{:#?}", stmt);
         }
         Err(e) => {
-            println!("❌ Error: {}", e);
+            println!("Error: {}", e);
         }
     }
 }
@@ -50,14 +50,14 @@ fn test_program(input: &str) {
     let mut parser = Parser::new(input);
     match parser.parse_program() {
         Ok(statements) => {
-            println!("✅ Success! Parsed {} statement(s)", statements.len());
+            println!("Success! Parsed {} statement(s)", statements.len());
             for (i, stmt) in statements.iter().enumerate() {
                 println!("\n--- Statement {} ---", i + 1);
                 println!("{:#?}", stmt);
             }
         }
         Err(e) => {
-            println!("❌ Error: {}", e);
+            println!("Error: {}", e);
         }
     }
 }
@@ -71,7 +71,7 @@ fn test_file(filename: &str) {
             test_program(&content);
         }
         Err(e) => {
-            println!("❌ Failed to read {}: {}", filename, e);
+            println!("Failed to read {}: {}", filename, e);
         }
     }
 }
@@ -110,17 +110,7 @@ fn main() {
     test_statement("BREAK");
     
     // Test control flow
-    test_statement("IF x > 5 DO\n    OUTPUT x\nENDIF");
+    test_statement("IF x > 5 THEN\n    OUTPUT x\nENDIF");
     test_statement("WHILE x < 10 DO\n    x <- x + 1\nENDWHILE");
-    test_statement("FOR i <- 1 TO 10 DO\n    OUTPUT i\nNEXT i");
-    
-    println!("\n{}", "=".repeat(60));
-    println!("PROGRAM TESTS (from files)");
-    println!("{}", "=".repeat(60));
-    
-    // Test full programs from example files
-    test_file("code/example0.pseu");
-    test_file("code/example1.pseu");
-    test_file("code/example2.pseu");
-    test_file("code/example3.pseu");
+    test_statement("FOR i <- 1 TO 10\n    OUTPUT i\nNEXT i");
 }
