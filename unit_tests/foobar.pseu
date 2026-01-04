@@ -1,0 +1,46 @@
+// Simple test script for basic functionality
+// Tests: variables, arithmetic, output, conditionals
+
+DECLARE foo : INTEGER
+DECLARE bar : INTEGER
+DECLARE result : INTEGER
+
+foo <- 42
+bar <- 10
+
+OUTPUT "Testing basic operations:"
+OUTPUT "foo = ", foo
+OUTPUT "bar = ", bar
+
+// Test addition
+result <- foo + bar
+OUTPUT "foo + bar = ", result
+
+// Test subtraction
+result <- foo - bar
+OUTPUT "foo - bar = ", result
+
+// Test multiplication
+result <- foo * bar
+OUTPUT "foo * bar = ", result
+
+// Test division
+result <- DIV(foo, bar)
+OUTPUT "DIV(foo, bar) = ", result
+
+// Test modulo
+result <- MOD(foo, bar)
+OUTPUT "MOD(foo, bar) = ", result
+
+// Test conditionals
+IF foo > bar THEN
+    OUTPUT "foo is greater than bar"
+ELSE
+    OUTPUT "foo is not greater than bar"
+ENDIF
+
+IF foo = 42 THEN
+    OUTPUT "foo equals 42"
+ENDIF
+
+OUTPUT "Test complete!"
