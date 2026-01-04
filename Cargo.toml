@@ -3,6 +3,10 @@ name = "pseuCompiler"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "pseudocode"
+path = "src/main.rs"
+
 [dependencies]
 log = "0.4"
 env_logger = "0.11"

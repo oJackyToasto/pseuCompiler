@@ -16,19 +16,11 @@ pub fn init() {
                 Level::Trace => "\x1b[90m",   // Bright Black
             };
             let reset = "\x1b[0m";
-            let level_symbol = match level {
-                Level::Error => "ERROR",
-                Level::Warn => "WARNING",
-                Level::Info => "INFO",
-                Level::Debug => "DEBUG",
-                Level::Trace => "TRACE",
-            };
             
             writeln!(
                 buf,
-                "{}{} {} {}{} {}",
+                "{}{} {}{} {}",
                 level_color,
-                level_symbol,
                 level,
                 reset,
                 if let Some(file) = record.file() {

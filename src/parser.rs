@@ -1485,7 +1485,6 @@ impl Parser {
     }
 
     pub fn parse_program(&mut self) -> Result<Vec<Stmt>, String> {
-        info!("Starting program parsing");
         let mut statements = Vec::new();
         while !matches!(self.current_token(), Token::EOF) {
             // Skip newlines between statements
@@ -1496,7 +1495,6 @@ impl Parser {
             trace!("Parsing statement at position {}", self.pos);
             statements.push(self.parse_statement()?);
         }
-        info!("Program parsing complete. Parsed {} statement(s)", statements.len());
         Ok(statements)
     }
 
