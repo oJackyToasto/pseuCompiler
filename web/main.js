@@ -733,6 +733,8 @@ function clearEditor() {
         editor.setValue('');
         clearErrorDecorations();
     }
+    // Reset filename to untitled
+    updateFilename('untitled');
     if (terminal) {
         terminal.clear();
         terminal.writeln('Pseudocode Terminal Ready');
@@ -757,6 +759,151 @@ function loadExample() {
     if (exampleName && examples[exampleName] && editor) {
         editor.setValue(examples[exampleName]);
         clearErrorDecorations();
+    }
+}
+
+// Update filename display
+function updateFilename(filename) {
+    const filenameInput = document.getElementById('filenameInput');
+    if (filenameInput) {
+        // Remove .pseu extension if present
+        const nameWithoutExt = filename.endsWith('.pseu') 
+            ? filename.slice(0, -5) 
+            : filename;
+        filenameInput.value = nameWithoutExt;
+    }
+}
+
+// Handle file selection
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+    
+    // Check file extension
+    if (!file.name.endsWith('.pseu')) {
+        if (terminal) {
+            terminal.writeln('\x1b[31mError: Please select a .pseu file\x1b[0m');
+        }
+        alert('Please select a .pseu file');
+        // Reset the input
+        event.target.value = '';
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+        try {
+            const content = e.target.result;
+            if (editor) {
+                editor.setValue(content);
+                clearErrorDecorations();
+                // Update filename display
+                updateFilename(file.name);
+                if (terminal) {
+                    terminal.writeln(`\x1b[32mOpened file: ${file.name}\x1b[0m`);
+                }
+            }
+        } catch (error) {
+            console.error('Error reading file:', error);
+            if (terminal) {
+                terminal.writeln(`\x1b[31mError reading file: ${error.message}\x1b[0m`);
+            }
+            alert(`Error reading file: ${error.message}`);
+        }
+        // Reset the input value to allow selecting the same file again
+        event.target.value = '';
+    };
+    
+    reader.onerror = () => {
+        console.error('Error reading file');
+        if (terminal) {
+            terminal.writeln('\x1b[31mError reading file\x1b[0m');
+        }
+        alert('Error reading file');
+        // Reset the input
+        event.target.value = '';
+    };
+    
+    reader.readAsText(file);
+}
+
+// Open file
+function openFile() {
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput) {
+        console.error('File input element not found');
+        return;
+    }
+    
+    // Trigger file selection
+    fileInput.click();
+}
+
+// Download file using browser's native save dialog
+async function downloadFile() {
+    if (!editor) {
+        console.error('Editor not initialized');
+        return;
+    }
+    
+    // Get current filename from display
+    const filenameInput = document.getElementById('filenameInput');
+    const currentFilename = filenameInput ? filenameInput.value.trim() || 'untitled' : 'untitled';
+    const filenameWithExt = currentFilename.endsWith('.pseu') ? currentFilename : `${currentFilename}.pseu`;
+    
+    const content = editor.getValue();
+    
+    // Try to use File System Access API (shows native save dialog)
+    if ('showSaveFilePicker' in window) {
+        try {
+            const fileHandle = await window.showSaveFilePicker({
+                suggestedName: filenameWithExt,
+                types: [{
+                    description: 'Pseudocode files',
+                    accept: {
+                        'text/plain': ['.pseu'],
+                    },
+                }],
+            });
+            
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            
+            // Update filename display (remove .pseu extension)
+            const savedName = fileHandle.name;
+            updateFilename(savedName);
+            
+            if (terminal) {
+                terminal.writeln(`\x1b[32mFile saved: ${savedName}\x1b[0m`);
+            }
+        } catch (error) {
+            // User cancelled the dialog
+            if (error.name !== 'AbortError') {
+                console.error('Error saving file:', error);
+                if (terminal) {
+                    terminal.writeln(`\x1b[31mError saving file: ${error.message}\x1b[0m`);
+                }
+            }
+        }
+    } else {
+        // Fallback for browsers without File System Access API
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filenameWithExt;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        if (terminal) {
+            terminal.writeln(`\x1b[32mFile download initiated: ${filenameWithExt}\x1b[0m`);
+        }
     }
 }
 
@@ -847,6 +994,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     initMonaco();
     await initWasm();
     
+    // Set up file input handler
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    document.getElementById('openBtn').addEventListener('click', openFile);
+    document.getElementById('downloadBtn').addEventListener('click', downloadFile);
     document.getElementById('runBtn').addEventListener('click', runCode);
     document.getElementById('checkBtn').addEventListener('click', checkSyntax);
     document.getElementById('clearBtn').addEventListener('click', clearEditor);
