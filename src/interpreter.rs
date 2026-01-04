@@ -16,7 +16,7 @@ type _InterpreterResult<T> = Result<T, String>;
 /// Error context for better error messages
 #[derive(Debug, Clone)]
 struct ErrorContext {
-    operation: String,
+    _operation: String,
     call_stack: Vec<String>,
     context: Vec<String>,  // Current context (e.g., "in FOR loop", "in IF block")
     variables_in_scope: Vec<String>,
@@ -25,7 +25,7 @@ struct ErrorContext {
 impl ErrorContext {
     fn new(operation: String) -> Self {
         Self {
-            operation,
+            _operation: operation,
             call_stack: Vec::new(),
             context: Vec::new(),
             variables_in_scope: Vec::new(),

@@ -94,19 +94,19 @@ macro_rules! log_trace {
 }
 
 /// Log an error with location information (cargo-style)
-pub fn error_at(msg: &str, file: &str, line: usize, col: usize) {
+pub fn _error_at(msg: &str, file: &str, line: usize, col: usize) {
     log::error!("{}", msg);
     eprintln!("  --> {}:{}:{}", file, line, col);
 }
 
 /// Log a warning with location information (cargo-style)
-pub fn warning_at(msg: &str, file: &str, line: usize, col: usize) {
+pub fn _warning_at(msg: &str, file: &str, line: usize, col: usize) {
     log::warn!("{}", msg);
     eprintln!("  --> {}:{}:{}", file, line, col);
 }
 
 /// Log a parsing error with position information
-pub fn log_parse_error(msg: &str, line: usize, column: usize) {
+pub fn _log_parse_error(msg: &str, line: usize, column: usize) {
     log::error!(
         "Parse error at line {}:{} - {}",
         line,
@@ -116,7 +116,7 @@ pub fn log_parse_error(msg: &str, line: usize, column: usize) {
 }
 
 /// Log a lexing error with position information
-pub fn log_lex_error(msg: &str, line: usize, column: usize) {
+pub fn _log_lex_error(msg: &str, line: usize, column: usize) {
     log::error!(
         "Lex error at line {}:{} - {}",
         line,
@@ -126,18 +126,18 @@ pub fn log_lex_error(msg: &str, line: usize, column: usize) {
 }
 
 /// Log a success message
-pub fn log_success(msg: &str) {
+pub fn _log_success(msg: &str) {
     log::info!("✓ {}", msg);
 }
 
 /// Log a section header (for test output)
-pub fn log_section(title: &str) {
+pub fn _log_section(title: &str) {
     let separator = "=".repeat(60);
     log::info!("\n{}\n{}\n{}", separator, title, separator);
 }
 
 /// Log test results
-pub fn log_test_result(test_name: &str, success: bool, details: Option<&str>) {
+pub fn _log_test_result(test_name: &str, success: bool, details: Option<&str>) {
     if success {
         log::info!("✓ {} - PASSED", test_name);
         if let Some(details) = details {
@@ -152,17 +152,17 @@ pub fn log_test_result(test_name: &str, success: bool, details: Option<&str>) {
 }
 
 /// Log AST output in a formatted way
-pub fn log_ast<T: std::fmt::Debug>(label: &str, ast: &T) {
+pub fn _log_ast<T: std::fmt::Debug>(label: &str, ast: &T) {
     log::debug!("{} AST:\n{:#?}", label, ast);
 }
 
 /// Log parser progress
-pub fn log_parser_step(step: &str) {
+pub fn _log_parser_step(step: &str) {
     log::trace!("Parser: {}", step);
 }
 
 /// Log token information (for debugging)
-pub fn log_token(token: &str, line: usize, column: usize) {
+pub fn _log_token(token: &str, line: usize, column: usize) {
     log::trace!("Token: '{}' at {}:{}", token, line, column);
 }
 
