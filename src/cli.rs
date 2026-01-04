@@ -85,71 +85,138 @@ fn print_help() {
 }
 
 fn run_interactive() {
+    println!("Pseudocode Interactive Interpreter");
     println!("Type 'exit' or 'quit' to exit, or 'help' for help");
+    println!("Press Enter on an empty line to finish multiline input");
     println!();
     
     let mut interpreter = Interpreter::new();
-    let mut line_buffer = String::new();
     
     loop {
-        print!(">>> ");
-        io::stdout().flush().unwrap();
+        // Accumulate multiline input
+        let mut input_buffer = String::new();
+        let mut line_count = 0;
         
-        line_buffer.clear();
-        match io::stdin().read_line(&mut line_buffer) {
-            Ok(_) => {
-                let line = line_buffer.trim();
-                
-                // Handle special commands
-                if line.is_empty() {
-                    continue;
-                }
-                
-                if line == "exit" || line == "quit" {
-                    println!("Goodbye!");
-                    break;
-                }
-                
-                if line == "help" {
-                    println!("Commands:");
-                    println!("  exit, quit  - Exit the interpreter");
-                    println!("  help        - Show this help");
-                    println!("  clear       - Clear the interpreter state");
-                    println!();
-                    println!("You can enter any pseudocode statement or expression.");
-                    continue;
-                }
-                
-                if line == "clear" {
-                    interpreter = Interpreter::new();
-                    println!("Interpreter state cleared.");
-                    continue;
-                }
-                
-                // Parse and execute using parse_program
-                let mut parser = Parser::new(line);
-                match parser.parse_program() {
-                    Ok(statements) => {
-                        for stmt in statements {
-                            match interpreter.evaluate_stmt(&stmt) {
-                                Ok(()) => {
-                                    // Statement executed successfully
-                                }
-                                Err(e) => {
-                                    eprintln!("Error: {}", e);
+        loop {
+            // Show prompt (>>> for first line, ... for continuation)
+            if line_count == 0 {
+                print!(">>> ");
+            } else {
+                print!("... ");
+            }
+            io::stdout().flush().unwrap();
+            
+            let mut line = String::new();
+            match io::stdin().read_line(&mut line) {
+                Ok(_) => {
+                    let trimmed = line.trim();
+                    
+                    // Empty line on continuation means "finish input"
+                    if line_count > 0 && trimmed.is_empty() {
+                        break;
+                    }
+                    
+                    // Empty line on first line means skip
+                    if line_count == 0 && trimmed.is_empty() {
+                        continue;
+                    }
+                    
+                    // Add line to buffer
+                    if !input_buffer.is_empty() {
+                        input_buffer.push('\n');
+                    }
+                    input_buffer.push_str(&line);
+                    line_count += 1;
+                    
+                    // Try to parse to see if we have a complete statement
+                    let mut test_parser = Parser::new(&input_buffer.trim());
+                    match test_parser.parse_program() {
+                        Ok(_) => {
+                            // Complete statement, break and execute
+                            break;
+                        }
+                        Err(e) => {
+                            // Check if error suggests we need more input
+                            let error_lower = e.to_lowercase();
+                            if error_lower.contains("unexpected end of file") ||
+                               error_lower.contains("was not closed") ||
+                               error_lower.contains("expected") && (
+                                   error_lower.contains("endfunction") ||
+                                   error_lower.contains("endprocedure") ||
+                                   error_lower.contains("endtype") ||
+                                   error_lower.contains("endif") ||
+                                   error_lower.contains("endwhile") ||
+                                   error_lower.contains("next") ||
+                                   error_lower.contains("until") ||
+                                   error_lower.contains("endcase")
+                               ) {
+                                // Likely incomplete, continue reading
+                                continue;
+                            } else {
+                                // Other parse error, might be complete but invalid
+                                // Try one more line in case it's a syntax issue
+                                // If still error after next line, break and show error
+                                if line_count > 1 {
                                     break;
                                 }
+                                continue;
                             }
                         }
                     }
-                    Err(e) => {
-                        eprintln!("Parse Error: {}", e);
+                }
+                Err(e) => {
+                    eprintln!("Error reading input: {}", e);
+                    return;
+                }
+            }
+        }
+        
+        let input = input_buffer.trim();
+        
+        // Handle special commands FIRST (before parsing)
+        // Check on first line to allow early exit
+        if line_count == 1 {
+            if input == "exit" || input == "quit" {
+                println!("Goodbye!");
+                break;
+            }
+            
+            if input == "help" {
+                println!("Commands:");
+                println!("  exit, quit  - Exit the interpreter");
+                println!("  help        - Show this help");
+                println!("  clear       - Clear the interpreter state");
+                println!();
+                println!("You can enter any pseudocode statement or expression.");
+                println!("For multiline input, press Enter on an empty line to finish.");
+                continue;
+            }
+            
+            if input == "clear" {
+                interpreter = Interpreter::new();
+                println!("Interpreter state cleared.");
+                continue;
+            }
+        }
+        
+        // Parse and execute
+        let mut parser = Parser::new(input);
+        match parser.parse_program() {
+            Ok(statements) => {
+                for stmt in statements {
+                    match interpreter.evaluate_stmt(&stmt) {
+                        Ok(()) => {
+                            // Statement executed successfully
+                        }
+                        Err(_e) => {
+                            // Error already logged by log_error! macro with line numbers
+                            break;
+                        }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Error reading input: {}", e);
-                break;
+                eprintln!("Parse Error: {}", e);
             }
         }
     }
@@ -161,10 +228,10 @@ fn execute_file(filename: &str) {
             let mut parser = Parser::new(&content);
             match parser.parse_program() {
                 Ok(statements) => {
-                    let mut interpreter = Interpreter::new();
+                    let mut interpreter = Interpreter::with_source_file(filename);
                     for stmt in statements.iter() {
-                        if let Err(e) = interpreter.evaluate_stmt(stmt) {
-                            eprintln!("Error: {}", e);
+                        if let Err(_e) = interpreter.evaluate_stmt(stmt) {
+                            // Error already logged by log_error! macro with line numbers
                             std::process::exit(1);
                         }
                     }

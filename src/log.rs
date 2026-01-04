@@ -3,41 +3,59 @@ use std::io::Write;
 
 // TODO: Make it exe arguments at last
 
-/// Initialize the logger with a custom formatter
+/// Initialize the logger with a custom formatter (cargo-style)
 pub fn init() {
     env_logger::Builder::from_default_env()
         .format(|buf, record| {
             let level = record.level();
-            let level_color = match level {
-                Level::Error => "\x1b[31m",   // Red
-                Level::Warn => "\x1b[33m",    // Yellow
-                Level::Info => "\x1b[36m",    // Cyan
-                Level::Debug => "\x1b[35m",   // Magenta
-                Level::Trace => "\x1b[90m",   // Bright Black
+            let (prefix, color) = match level {
+                Level::Error => ("error", "\x1b[31m"),   // Red
+                Level::Warn => ("warning", "\x1b[33m"),  // Yellow
+                Level::Info => ("info", "\x1b[36m"),     // Cyan
+                Level::Debug => ("debug", "\x1b[90m"),   // Dim
+                Level::Trace => ("trace", "\x1b[90m"),   // Dim
             };
             let reset = "\x1b[0m";
             
+            // Format file location
+            let location = if let Some(file) = record.file() {
+                if let Some(line) = record.line() {
+                    format!("[{}:{}]", file, line)
+                } else {
+                    format!("[{}]", file)
+                }
+            } else {
+                String::new()
+            };
+            
+            // Cargo-style format: "error: message [file:line]"
             writeln!(
                 buf,
-                "{}{} {}{} {}",
-                level_color,
-                level,
+                "{}{}{}: {}{}",
+                color,
+                prefix,
                 reset,
-                if let Some(file) = record.file() {
-                    format!("[{}:{}]", file, record.line().unwrap_or(0))
+                record.args(),
+                if !location.is_empty() {
+                    format!(" {}", location)
                 } else {
                     String::new()
-                },
-                record.args()
+                }
             )
         })
         .filter_level(LevelFilter::Info)
         .init();
 }
 
-/// Log an error message
+/// Log an error message with optional line number
 #[macro_export]
 macro_rules! log_error {
+    ($msg:expr) => {
+        log::error!("{}", $msg);
+    };
+    ($msg:expr, $line:expr) => {
+        log::error!("{} (at line {})", $msg, $line);
+    };
     ($($arg:tt)*) => {
         log::error!($($arg)*);
     };
@@ -73,6 +91,18 @@ macro_rules! log_trace {
     ($($arg:tt)*) => {
         log::trace!($($arg)*);
     };
+}
+
+/// Log an error with location information (cargo-style)
+pub fn error_at(msg: &str, file: &str, line: usize, col: usize) {
+    log::error!("{}", msg);
+    eprintln!("  --> {}:{}:{}", file, line, col);
+}
+
+/// Log a warning with location information (cargo-style)
+pub fn warning_at(msg: &str, file: &str, line: usize, col: usize) {
+    log::warn!("{}", msg);
+    eprintln!("  --> {}:{}:{}", file, line, col);
 }
 
 /// Log a parsing error with position information

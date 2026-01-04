@@ -12,7 +12,7 @@ TYPE Season = (Spring, Summer, Autumn, Winter)
 TYPE StudentRecord
     DECLARE LastName : STRING
     DECLARE FirstName : STRING
-    DECLARE DateOfBirth : DATE
+    // DECLARE DateOfBirth : DATE
     DECLARE YearGroup : INTEGER
     DECLARE FormGroup : CHAR
 ENDTYPE
@@ -33,7 +33,7 @@ DECLARE Name <- "John" : STRING
 DECLARE Grade <- 'A' : CHAR
 DECLARE IsValid <- TRUE : BOOLEAN
 DECLARE Price <- 99.99 : REAL
-DECLARE BirthDate : DATE
+// DECLARE BirthDate : DATE
 
 // Array declarations
 DECLARE Numbers : ARRAY[1:10] OF INTEGER 
@@ -66,7 +66,8 @@ IsValid <- Counter <= 10
 // ============================================
 // ARRAY OPERATIONS
 // ============================================
-
+OUTPUT Counter
+Counter <- 1
 Numbers[1] <- 42
 Numbers[Counter] <- Numbers[1] + 5
 Matrix[2, 3] <- 3.14
@@ -140,6 +141,7 @@ NEXT k
 // ============================================
 
 REPEAT
+    OUTPUT "Enter a number"
     INPUT Counter
     OUTPUT "You entered: ", Counter
 UNTIL Counter > 0
@@ -156,10 +158,10 @@ CASE OF Counter
 ENDCASE
 
 CASE OF CurrentSeason
-    Spring: OUTPUT "It's spring!"
-    Summer: OUTPUT "It's summer!"
-    Autumn: OUTPUT "It's autumn!"
-    Winter: OUTPUT "It's winter!"
+    "Spring": OUTPUT "It's spring!"
+    "Summer": OUTPUT "It's summer!"
+    "Autumn": OUTPUT "It's autumn!"
+    "Winter": OUTPUT "It's winter!"
     OTHERWISE: OUTPUT "Unknown season"
 ENDCASE
 
@@ -233,23 +235,6 @@ RightStr <- RIGHT(Text, 5)
 Counter <- ROUND(Price)
 Counter <- MOD(100, 3)
 Counter <- DIV(100, 3)
-
-// ============================================
-// BREAK STATEMENT
-// ============================================
-
-WHILE Counter < 100
-    Counter <- Counter + 1
-    IF Counter = 50 THEN
-        BREAK
-    ENDIF
-ENDWHILE
-
-FOR i <- 1 TO 100
-    IF Numbers[i] = 42 THEN
-        BREAK
-    ENDIF
-NEXT i
 
 // ============================================
 // FUNCTION DECLARATIONS
@@ -347,20 +332,8 @@ Total <- ROUND(Price) + (Counter * 2) - (DIV(Total, 3))
 // NESTED STRUCTURES
 // ============================================
 
-IF Counter > 0 THEN
-    WHILE Counter < 10
-        FOR i <- 1 TO 5
-            IF Numbers[i] > 0 THEN
-                OUTPUT Numbers[i]
-            ELSE
-                BREAK
-            ENDIF
-        NEXT i
-        Counter <- Counter + 1
-    ENDWHILE
-ENDIF
-
 // Nested function calls
+
 Counter <- Add(Multiply(2, 3), (10 / 2))
 Name <- GetFullName(UCASE("john"), LCASE("DOE"))
 

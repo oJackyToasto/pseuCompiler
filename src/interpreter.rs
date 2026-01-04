@@ -2,7 +2,7 @@ use core::str;
 use std::collections::HashMap;
 use rand::Rng;
 
-use crate::{ast::{Expr, Function, Procedure, Stmt, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*, FileMode, TypeDeclarationVariant}, log_error};
+use crate::{ast::{Expr, Function, Procedure, Stmt, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*, FileMode, TypeDeclarationVariant, Span}, log_error};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write, Seek, SeekFrom, BufRead};
 
@@ -12,6 +12,57 @@ enum _ControlFlow {
 }
 
 type _InterpreterResult<T> = Result<T, String>;
+
+/// Error context for better error messages
+#[derive(Debug, Clone)]
+struct ErrorContext {
+    operation: String,
+    call_stack: Vec<String>,
+    context: Vec<String>,  // Current context (e.g., "in FOR loop", "in IF block")
+    variables_in_scope: Vec<String>,
+}
+
+impl ErrorContext {
+    fn new(operation: String) -> Self {
+        Self {
+            operation,
+            call_stack: Vec::new(),
+            context: Vec::new(),
+            variables_in_scope: Vec::new(),
+        }
+    }
+
+    fn format(&self, message: &str) -> String {
+        let mut error = format!("error: {}\n", message);
+        
+        if !self.call_stack.is_empty() {
+            error.push_str("  |\n");
+            error.push_str("  | Call stack:\n");
+            for (i, call) in self.call_stack.iter().enumerate() {
+                if i == self.call_stack.len() - 1 {
+                    error.push_str(&format!("  |   {}\n", call));
+                } else {
+                    error.push_str(&format!("  |   {}\n", call));
+                }
+            }
+        }
+        
+        if !self.context.is_empty() {
+            error.push_str("  |\n");
+            error.push_str("  | Context:\n");
+            for ctx in &self.context {
+                error.push_str(&format!("  |   {}\n", ctx));
+            }
+        }
+        
+        if !self.variables_in_scope.is_empty() {
+            error.push_str("  |\n");
+            error.push_str(&format!("  | Available variables: {:?}\n", self.variables_in_scope));
+        }
+        
+        error
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -59,6 +110,13 @@ pub struct Interpreter {
 
     type_definitions: HashMap<String, Type>,
     open_files: HashMap<String, FileHandle>,  // Maps filename to file handle
+    
+    // Traceback support
+    call_stack: Vec<String>,  // Function/procedure call stack
+    context_stack: Vec<String>,  // Statement context (FOR, WHILE, IF, etc.)
+    
+    // Source file directory for resolving relative file paths
+    source_dir: Option<std::path::PathBuf>,
 }
 
 impl Interpreter {
@@ -70,12 +128,83 @@ impl Interpreter {
             procedures: HashMap::new(),
             type_definitions: HashMap::new(),
             open_files: HashMap::new(),
+            call_stack: Vec::new(),
+            context_stack: Vec::new(),
+            source_dir: None,
         }
+    }
+    
+    /// Create a new interpreter with a source file directory for resolving relative paths
+    pub fn with_source_file(source_file: &str) -> Self {
+        let source_dir = std::path::Path::new(source_file)
+            .parent()
+            .map(|p| p.to_path_buf());
+        Self {
+            variables: HashMap::new(),
+            variables_type: HashMap::new(),
+            functions: HashMap::new(),
+            procedures: HashMap::new(),
+            type_definitions: HashMap::new(),
+            open_files: HashMap::new(),
+            call_stack: Vec::new(),
+            context_stack: Vec::new(),
+            source_dir,
+        }
+    }
+    
+    /// Resolve a file path relative to the source file directory
+    fn resolve_file_path(&self, filename: &str) -> std::path::PathBuf {
+        let path = std::path::Path::new(filename);
+        if path.is_absolute() {
+            // Absolute path, use as-is
+            path.to_path_buf()
+        } else if let Some(ref source_dir) = self.source_dir {
+            // Relative path, resolve against source directory
+            source_dir.join(path)
+        } else {
+            // No source directory, use current working directory
+            path.to_path_buf()
+        }
+    }
+
+    /// Push a function/procedure call onto the call stack
+    fn push_call(&mut self, name: &str, args: Option<&[Value]>) {
+        let call_str = if let Some(args) = args {
+            let arg_strs: Vec<String> = args.iter().map(|v| format!("{:?}", v)).collect();
+            format!("{}({})", name, arg_strs.join(", "))
+        } else {
+            format!("{}()", name)
+        };
+        self.call_stack.push(call_str);
+    }
+
+    /// Pop a function/procedure call from the call stack
+    fn pop_call(&mut self) {
+        self.call_stack.pop();
+    }
+
+    /// Push a context (e.g., "in FOR loop", "in IF block")
+    fn push_context(&mut self, context: String) {
+        self.context_stack.push(context);
+    }
+
+    /// Pop a context
+    fn pop_context(&mut self) {
+        self.context_stack.pop();
+    }
+
+    /// Create an error with full context
+    fn error_with_context(&self, message: &str, operation: &str) -> String {
+        let mut ctx = ErrorContext::new(operation.to_string());
+        ctx.call_stack = self.call_stack.clone();
+        ctx.context = self.context_stack.clone();
+        ctx.variables_in_scope = self.variables.keys().cloned().collect();
+        ctx.format(message)
     }
 
     pub fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
         match stmt {
-            Stmt::Declare { name, type_name, initial_value } => {
+            Stmt::Declare { name, type_name, initial_value, span } => {
                 match type_name {
                     Type::INTEGER | Type::REAL | Type::BOOLEAN | Type::CHAR | Type::STRING => {
                         let value = if let Some(expr) = initial_value {
@@ -99,7 +228,7 @@ impl Interpreter {
                                 Value::Integer(i) => i,
                                 _ => {
                                     let msg = format!("Invalid start index type: {:?}", start_val);
-                                    log_error!("{}", msg);
+                                    log_error!(msg, span.line);
                                     return Err(msg);
                                 }
                             };
@@ -107,14 +236,14 @@ impl Interpreter {
                                 Value::Integer(i) => i,
                                 _ => {
                                     let msg = format!("Invalid end index type: {:?}", end_val);
-                                    log_error!("{}", msg);
+                                    log_error!(msg, span.line);
                                     return Err(msg);
                                 }
                             };
 
                             if start < 1 || end < start {
                                 let msg = format!("Invalid array dimensions: start index must be >= 1 and end index must be >= start index");
-                                log_error!("{}", msg);
+                                log_error!(msg, span.line);
                                 return Err(msg);
                             }
 
@@ -160,12 +289,12 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("Unsupported type: {:?}", type_name);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
             }
-            Stmt::Define { name, values, type_name } => {
+            Stmt::Define { name, values, type_name, span } => {
                 let type_def = self.type_definitions.get(type_name)
                     .ok_or_else(|| format!("Type {} not found", type_name))?;
                 
@@ -184,7 +313,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("Define statement for type {} is not supported", type_name);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -193,7 +322,7 @@ impl Interpreter {
                 self.variables_type.insert(name.clone(), type_def.clone());
                 Ok(())
             }
-            Stmt::Assign { name, indices, expression } => {
+            Stmt::Assign { name, indices, expression, span } => {
                 let value = self.evaluate_expr(expression)?;
 
                 // Check if this is a field access assignment (obj.field)
@@ -213,7 +342,7 @@ impl Interpreter {
                         }
                         _ => {
                             let msg = format!("Field access on non-record variable: {}", obj_name);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                     }
@@ -235,7 +364,7 @@ impl Interpreter {
                         }
                         _ => {
                             let msg = format!("Pointer dereference assignment on non-pointer variable: {}", ptr_name);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                     }
@@ -254,14 +383,14 @@ impl Interpreter {
                             Value::Integer(i) => {
                                 if i < 1 {
                                     let msg = format!("Invalid index: {}", i);
-                                    log_error!("{}", msg);
+                                    log_error!(msg, span.line);
                                     return Err(msg);
                                 }
                                 index_pos.push((i - 1) as usize);
                             }
                             _ => {
                                 let msg = format!("Invalid index type: {:?}", idx_val);
-                                log_error!("{}", msg);
+                                log_error!(msg, span.line);
                                 return Err(msg);
                             }
                         }
@@ -272,7 +401,7 @@ impl Interpreter {
                         Some(Value::Array { dimensions, .. }) => dimensions.clone(),
                         Some(Value::Set { .. }) => {
                             let msg = format!("Cannot assign to set '{}' - sets are immutable", name);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                         Some(_) => return Err(format!("Variable '{}' is not an array", name)),
@@ -290,7 +419,7 @@ impl Interpreter {
                         Value::Array { data, .. } => {
                             if flat_idx >= data.len() {
                                 let msg = format!("Index out of bounds: {} for array {}", flat_idx, name);
-                                log_error!("{}", msg);
+                                log_error!(msg, span.line);
                                 return Err(msg);
                             }
                             data[flat_idx] = value;
@@ -298,7 +427,7 @@ impl Interpreter {
                         }
                         _ => {
                             let msg = format!("Invalid array type: {:?}", array);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                     }
@@ -308,7 +437,7 @@ impl Interpreter {
                     Ok(())
                 }
             }
-            Stmt::Output { exprs } => {
+            Stmt::Output { exprs, span: _ } => {
                 for expr in exprs {
                     let value = self.evaluate_expr(expr)?;
                     print!("{}", self.value_to_string(&value));
@@ -316,7 +445,7 @@ impl Interpreter {
                 println!();
                 Ok(())
             }
-            Stmt::Input { name } => {
+            Stmt::Input { name, span: _ } => {
                 let var_type = self.variables_type.get(name)
                     .ok_or_else(|| format!("Variable {} not found", name))?;
 
@@ -356,7 +485,7 @@ impl Interpreter {
                 self.variables.insert(name.clone(), value);
                 Ok(())
             }
-            Stmt::If { condition, then_stmt, else_stmt } => {
+            Stmt::If { condition, then_stmt, else_stmt, span: _ } => {
                 let condition_value = self.evaluate_expr(condition)?;
 
                 let is_true = match condition_value {
@@ -366,10 +495,12 @@ impl Interpreter {
                     Value::String(s) => !s.is_empty(),
                     _ => {
                         let msg = format!("Invalid condition type: {:?}", condition_value);
-                        log_error!("{}", msg);
-                        return Err(msg);
+                        return Err(self.error_with_context(&msg, "IF condition evaluation"));
                     },
                 };
+
+                // Push context
+                self.push_context(format!("in IF block (condition: {})", is_true));
 
                 if is_true {
                     for stmt in then_stmt {
@@ -381,10 +512,17 @@ impl Interpreter {
                     }
                 }
 
+                // Pop context
+                self.pop_context();
                 Ok(())
             }
-            Stmt::While { condition, body } => {
+            Stmt::While { condition, body, span: _ } => {
+                // Push context
+                self.push_context("in WHILE loop".to_string());
+                
+                let mut iteration = 0;
                 loop {
+                    iteration += 1;
                     let condition_value = self.evaluate_expr(condition)?;
                     let is_true = match condition_value {
                         Value::Boolean(b) => b,
@@ -393,8 +531,8 @@ impl Interpreter {
                         Value::String(s) => !s.is_empty(),
                         _ => {
                             let msg = format!("Invalid condition type: {:?}", condition_value);
-                            log_error!("{}", msg);
-                            return Err(msg);
+                            self.pop_context();
+                            return Err(self.error_with_context(&msg, "WHILE condition evaluation"));
                         },
                     };
                     
@@ -402,13 +540,20 @@ impl Interpreter {
                         break;
                     }
                     
+                    // Update context with iteration
+                    self.context_stack.pop();
+                    self.push_context(format!("in WHILE loop (iteration {})", iteration));
+                    
                     for stmt in body {
                         self.evaluate_stmt(stmt)?;
                     }
                 }
+                
+                // Pop context
+                self.pop_context();
                 Ok(())
             }
-            Stmt::For { counter, start, end, step, body } => {
+            Stmt::For { counter, start, end, step, body, span: _ } => {
                 // Evaluate start and end values
                 let start_val = self.evaluate_expr(start)?;
                 let end_val = self.evaluate_expr(end)?;
@@ -425,17 +570,18 @@ impl Interpreter {
                     (Value::Integer(s), Value::Integer(e), Value::Integer(st)) => (s, e, st),
                     _ => {
                         let msg = format!("FOR loop requires integer values for start, end, and step");
-                        log_error!("{}", msg);
-                        return Err(msg);
+                        return Err(self.error_with_context(&msg, "FOR loop initialization"));
                     }
                 };
                 
                 // Validate step
                 if step_int == 0 {
                     let msg = format!("FOR loop step cannot be zero");
-                    log_error!("{}", msg);
-                    return Err(msg);
+                    return Err(self.error_with_context(&msg, "FOR loop initialization"));
                 }
+                
+                // Push context
+                self.push_context(format!("in FOR loop ({} = {} TO {})", counter, start_int, end_int));
                 
                 // Save the original value and type of counter if it exists (for scoping)
                 let original_counter = self.variables.get(counter).cloned();
@@ -461,6 +607,10 @@ impl Interpreter {
                         break;
                     }
                     
+                    // Update context with current counter value
+                    self.context_stack.pop();
+                    self.push_context(format!("in FOR loop ({} = {})", counter, current));
+                    
                     // Execute body
                     for stmt in body {
                         self.evaluate_stmt(stmt)?;
@@ -470,6 +620,9 @@ impl Interpreter {
                     current += step_int;
                     self.variables.insert(counter.clone(), Value::Integer(current));
                 }
+                
+                // Pop context
+                self.pop_context();
                 
                 // Restore original counter value and type (if it existed) or remove it
                 if let Some(orig) = original_counter {
@@ -484,8 +637,18 @@ impl Interpreter {
                 
                 Ok(())
             }
-            Stmt::RepeatUntil { body, condition } => {
+            Stmt::RepeatUntil { body, condition, span: _ } => {
+                // Push context
+                self.push_context("in REPEAT...UNTIL loop".to_string());
+                
+                let mut iteration = 0;
                 loop {
+                    iteration += 1;
+                    
+                    // Update context with iteration
+                    self.context_stack.pop();
+                    self.push_context(format!("in REPEAT...UNTIL loop (iteration {})", iteration));
+                    
                     for stmt in body {
                         self.evaluate_stmt(stmt)?;
                     }
@@ -497,8 +660,8 @@ impl Interpreter {
                         Value::String(s) => !s.is_empty(),
                         _ => {
                             let msg = format!("Invalid condition type: {:?}", condition_value);
-                            log_error!("{}", msg);
-                            return Err(msg);
+                            self.pop_context();
+                            return Err(self.error_with_context(&msg, "REPEAT...UNTIL condition evaluation"));
                         },
                     };
 
@@ -506,9 +669,12 @@ impl Interpreter {
                         break;
                     }
                 }
+                
+                // Pop context
+                self.pop_context();
                 Ok(())
             }
-            Stmt::Case { expression, cases, otherwise } => {
+            Stmt::Case { expression, cases, otherwise, span: _ } => {
                 let expr_value = self.evaluate_expr(expression)?;
 
                 let mut matched = false;
@@ -533,49 +699,58 @@ impl Interpreter {
                 }
                 Ok(())
             }
-            Stmt::FunctionDeclaration { function } => {
+            Stmt::FunctionDeclaration { function, span } => {
                 let func_name = function.name.clone();
 
                 if self.functions.contains_key(&func_name) {
                     let msg = format!("Function {} already declared", func_name);
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return Err(msg);
                 }
 
                 self.functions.insert(func_name, function.clone());
                 Ok(())
             }
-            Stmt::ProcedureDeclaration { procedure } => {
+            Stmt::ProcedureDeclaration { procedure, span } => {
                 let proc_name = procedure.name.clone();
 
                 if self.procedures.contains_key(&proc_name) {
                     let msg = format!("Procedure {} already declared", proc_name);
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return Err(msg);
                 }
 
                 self.procedures.insert(proc_name, procedure.clone());
                 Ok(())
             }
-            Stmt::Call { name, args } => {
+            Stmt::Call { name, args, span: _ } => {
                 // Clone the procedure data we need before we need mutable access
                 let procedure = self.procedures.get(name)
-                    .ok_or_else(|| format!("Procedure {} not found", name))?
+                    .ok_or_else(|| {
+                        let msg = format!("Procedure {} not found", name);
+                        self.error_with_context(&msg, "procedure call")
+                    })?
                     .clone();  // Clone the entire procedure
             
                 let arg_vals : Vec<Value> = if let Some(args_exprs) = args {
                     args_exprs.iter()
                         .map(|expr| self.evaluate_expr(expr))
-                        .collect::<Result<_, _>>()?
+                        .collect::<Result<_, _>>()
+                        .map_err(|e| {
+                            let msg = format!("Error evaluating procedure arguments: {}", e);
+                            self.error_with_context(&msg, "evaluating procedure arguments")
+                        })?
                 } else {
                     Vec::new()
                 };
             
                 if arg_vals.len() != procedure.params.len() {
                     let msg = format!("Procedure {} expects {} arguments, got {}", name, procedure.params.len(), arg_vals.len());
-                    log_error!("{}", msg);
-                    return Err(msg);
+                    return Err(self.error_with_context(&msg, "procedure call"));
                 }
+            
+                // Push procedure call onto call stack
+                self.push_call(name, Some(&arg_vals));
             
                 let saved_vars = self.variables.clone();
                 let saved_vars_type = self.variables_type.clone();
@@ -591,42 +766,61 @@ impl Interpreter {
             
                 self.variables = saved_vars;
                 self.variables_type = saved_vars_type;
+                
+                // Pop procedure call from call stack
+                self.pop_call();
                 Ok(())
             }
-            Stmt::Return { value: _value } => {
+            Stmt::Return { value: _value, span } => {
                 // RETURN should only be used inside functions
                 // This case handles RETURN in the main program (which is an error)
                 let msg = "RETURN statement outside of function".to_string();
-                log_error!("{}", msg);
+                log_error!(msg, span.line);
                 Err(msg)
             }
 
-            Stmt::OpenFile { filename, mode } => {
+            Stmt::OpenFile { filename, mode, span } => {
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("Filename must be a string, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
 
                 if self.open_files.contains_key(&filename_str) {
                     let msg = format!("File {} already open", filename_str);
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return Err(msg);
                 }
 
+                // Resolve file path relative to source directory
+                let resolved_path = self.resolve_file_path(&filename_str);
+                let resolved_path_str = resolved_path.to_string_lossy().to_string();
+                
                 let file: File = match mode {
                     FileMode::READ => {
-                        OpenOptions::new().read(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for reading", filename_str))?
+                        OpenOptions::new().read(true).open(&resolved_path).map_err(|e| {
+                            let msg = format!("Failed to open file {} for reading: {}", resolved_path_str, e);
+                            log_error!(msg, span.line);
+                            msg
+                        })?
                     }
                     FileMode::WRITE => {
-                        OpenOptions::new().write(true).create(true).truncate(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for writing", filename_str))?
+                        OpenOptions::new().write(true).create(true).truncate(true).open(&resolved_path).map_err(|e| {
+                            let msg = format!("Failed to open file {} for writing: {}", resolved_path_str, e);
+                            log_error!(msg, span.line);
+                            msg
+                        })?
                     }
                     FileMode::RANDOM => {
-                        OpenOptions::new().read(true).write(true).create(true).open(&filename_str).map_err(|_| format!("Failed to open file {} for random access", filename_str))?
+                        OpenOptions::new().read(true).write(true).create(true).open(&resolved_path).map_err(|e| {
+                            let msg = format!("Failed to open file {} for random access: {}", resolved_path_str, e);
+                            log_error!(msg, span.line);
+                            msg
+                        })?
                     }
                 };
 
@@ -644,13 +838,13 @@ impl Interpreter {
                 
                 Ok(())
             }
-            Stmt::CloseFile { filename } => {
+            Stmt::CloseFile { filename, span } => {
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("CLOSEFILE expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -658,19 +852,19 @@ impl Interpreter {
                 // Remove file from open_files (Rust will automatically close it)
                 if self.open_files.remove(&filename_str).is_none() {
                     let msg = format!("File '{}' is not open", filename_str);
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return Err(msg);
                 }
                 
                 Ok(())
             }
-            Stmt::ReadFile { filename, name } => {
+            Stmt::ReadFile { filename, name, span } => {
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("READFILE expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -707,7 +901,7 @@ impl Interpreter {
                     },
                     FileHandle::Write(_) => {
                         let msg = format!("Cannot read from file '{}' opened in WRITE mode", filename_str);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     },
                 }
@@ -727,20 +921,20 @@ impl Interpreter {
                 // Ensure variable is STRING type
                 if !matches!(var_type, Type::STRING) {
                     let msg = format!("READFILE variable '{}' must be STRING type", name);
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return Err(msg);
                 }
                 
                 self.variables.insert(name.clone(), Value::String(line));
                 Ok(())
             }
-            Stmt::WriteFile { filename, exprs } => {
+            Stmt::WriteFile { filename, exprs, span } => {
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("WRITEFILE expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -772,20 +966,20 @@ impl Interpreter {
                     },
                     FileHandle::Read(_) => {
                         let msg = format!("Cannot write to file '{}' opened in READ mode", filename_str);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     },
                 }
                 
                 Ok(())
             }
-            Stmt::Seek { filename, address } => {
+            Stmt::Seek { filename, address, span } => {
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("SEEK expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -795,7 +989,7 @@ impl Interpreter {
                     Value::Integer(i) => i,
                     _ => {
                         let msg = format!("SEEK expects INTEGER address, got {:?}", address_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -811,21 +1005,21 @@ impl Interpreter {
                     },
                     _ => {
                         let msg = format!("SEEK only works with files opened in RANDOM mode");
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     },
                 }
                 
                 Ok(())
             }
-            Stmt::GetRecord { filename, variable } => {
+            Stmt::GetRecord { filename, variable, span } => {
                 // GetRecord reads a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("GETRECORD expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -846,29 +1040,33 @@ impl Interpreter {
                                 self.variables.insert(variable.clone(), Value::String(record));
                             }
                             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                                return Err(format!("End of file reached in GETRECORD"));
+                                let msg = format!("End of file reached in GETRECORD");
+                                log_error!(msg, span.line);
+                                return Err(msg);
                             }
                             Err(e) => {
-                                return Err(format!("Failed to read record from file '{}': {}", filename_str, e));
+                                let msg = format!("Failed to read record from file '{}': {}", filename_str, e);
+                                log_error!(msg, span.line);
+                                return Err(msg);
                             }
                         }
                     }
                     _ => {
                         let msg = format!("GETRECORD only works with files opened in RANDOM mode");
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 }
                 Ok(())
             }
-            Stmt::PutRecord { filename, variable } => {
+            Stmt::PutRecord { filename, variable, span } => {
                 // PutRecord writes a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("PUTRECORD expects STRING filename, got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 };
@@ -901,7 +1099,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("PUTRECORD only works with files opened in RANDOM mode");
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         return Err(msg);
                     }
                 }
@@ -909,7 +1107,7 @@ impl Interpreter {
                 Ok(())
             }
 
-            Stmt::TypeDeclaration { name, variant } => {
+            Stmt::TypeDeclaration { name, variant, span: _ } => {
                 let type_def = match variant {
                     TypeDeclarationVariant::Record { fields } => {
                         Type::Record {
@@ -1037,7 +1235,7 @@ impl Interpreter {
             Type::Enum { name, values } => {
                 if values.is_empty() {
                     let msg = format!("Enum type {} has no values", name);
-                    log_error!("{}", msg);
+                    log_error!(msg);
                     return Err(msg);
                 }
                 Ok(Value::Enum {
@@ -1087,48 +1285,54 @@ impl Interpreter {
 
     pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
-            Expr::Number(num) => {
+            Expr::Number(num, _) => {
                 if num.contains('.') {
                     Ok(Value::Real(num.parse().map_err(|_| "Invalid real number")?))
                 } else {
                     Ok(Value::Integer(num.parse().map_err(|_| "Invalid integer number")?))
                 }
             }
-            Expr::String(str) => Ok(Value::String(str.clone())),
-            Expr::Char(ch) => {
+            Expr::String(str, _) => Ok(Value::String(str.clone())),
+            Expr::Char(ch, _) => {
                 let c = ch.chars().nth(0).unwrap_or('\0');
                 Ok(Value::Char(c))
             }
-            Expr::Boolean(bool) => {
+            Expr::Boolean(bool, _) => {
                 match bool {
                     true => Ok(Value::Boolean(true)),
                     false => Ok(Value::Boolean(false)),
                 }
             },
-            Expr::Variable(var) => {
+            Expr::Variable(var, _) => {
                 self.variables.get(var)
                     .cloned()
-                    .ok_or_else(|| format!("Variable {} not found", var))
+                    .ok_or_else(|| {
+                        let msg = format!("Variable '{}' not found", var);
+                        self.error_with_context(&msg, "variable access")
+                    })
             }
-            Expr::BinaryOp(left, op, right) => {
+            Expr::BinaryOp(left, op, right, span) => {
                 let left_val = self.evaluate_expr(left)?;
                 let right_val = self.evaluate_expr(right)?;
-                self.evaluate_binary_op(op.clone(), &left_val, &right_val)
+                self.evaluate_binary_op(op.clone(), &left_val, &right_val, span.clone())
             }
-            Expr::UnaryOp(op, expr) => {
-                self.evaluate_unary_op(op.clone(), expr)
+            Expr::UnaryOp(op, expr, span) => {
+                self.evaluate_unary_op(op.clone(), expr, span.clone())
             }
-            Expr::FunctionCall { name, args } => {
-                self.evaluate_function_call(name, &Some(args.clone()))
+            Expr::FunctionCall { name, args, span } => {
+                self.evaluate_function_call(name, &Some(args.clone()), span.clone())
             }
-            Expr::ArrayAccess { array, indices } => {
+            Expr::ArrayAccess { array, indices, span } => {
                 // Evaluate indices first (before borrowing array)
                 let index_vals : Vec<Value> = indices.iter()
                     .map(|idx| self.evaluate_expr(idx))
                     .collect::<Result<_, _>>()?;
             
                 let array_val = self.variables.get(array)
-                    .ok_or_else(|| format!("Variable {} not found", array))?;
+                    .ok_or_else(|| {
+                        let msg = format!("Variable '{}' not found", array);
+                        self.error_with_context(&msg, "array access")
+                    })?;
             
                 let mut index_positions = Vec::new();
                 for idx_val in index_vals {
@@ -1136,14 +1340,13 @@ impl Interpreter {
                         Value::Integer(i) => {
                             if i < 1 {
                                 let msg = format!("Index must be >= 1, got {}", i);
-                                log_error!("{}", msg);
-                                return Err(msg);
+                                return Err(self.error_with_context(&msg, "array index validation"));
                             }
                             index_positions.push((i - 1) as usize);  // Convert 1-based to 0-based
                         }
                         _ => {
                             let msg = format!("Index must be integer, got {:?}", idx_val);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                     }
@@ -1154,7 +1357,7 @@ impl Interpreter {
                         let flat_index = self.calculate_array_index(index_positions, dimensions)?;
                         if flat_index >= data.len() {
                             let msg = format!("Array index out of bounds: {}", flat_index);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                         Ok(data[flat_index].clone())
@@ -1163,13 +1366,13 @@ impl Interpreter {
                         // Sets only support single index
                         if index_positions.len() != 1 {
                             let msg = format!("Set access requires exactly 1 index, got {}", index_positions.len());
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                         let index = index_positions[0];
                         if index >= elements.len() {
                             let msg = format!("Set index out of bounds: {}", index);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return Err(msg);
                         }
                         Ok(elements[index].clone())
@@ -1177,17 +1380,17 @@ impl Interpreter {
                     Value::Enum { .. } => {
                         // Enums don't support indexed access - they're single values
                         let msg = format!("Cannot use indexed access on enum value: {}", array);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                     _ => {
                         let msg = format!("Indexed access on unsupported type: {}", array);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
             }
-            Expr::FieldAccess { object, field } => {
+            Expr::FieldAccess { object, field, span } => {
                 let object_val = self.evaluate_expr(object)?;
                 match object_val {
                     Value::Record { type_name, fields } => {
@@ -1197,15 +1400,15 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("Field access on non-record value: {:?}", object_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
             }
-            Expr::PointerRef { target } => {
+            Expr::PointerRef { target, span } => {
                 // Match on the expression to extract variable name
                 match target.as_ref() {
-                    Expr::Variable(var_name) => {
+                    Expr::Variable(var_name, _) => {
                         // Get the variable's type
                         let var_type = self.variables_type.get(var_name)
                             .ok_or_else(|| format!("Variable '{}' not found for pointer reference", var_name))?;
@@ -1221,7 +1424,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("Pointer reference (^) can only be applied to variables, got {:?}", target);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1286,12 +1489,12 @@ impl Interpreter {
             //                         })
             //                     } else {
             //                         let msg = format!("Enum index out of bounds: {}", idx);
-            //                         log_error!("{}", msg);
+            //                         log_error!(msg, span.line);
             //                         Err(msg)
             //                     }
             //                 } else {
             //                     let msg = format!("Invalid enum value '{}' for type '{}'", value, enum_type);
-            //                     log_error!("{}", msg);
+            //                     log_error!(msg, span.line);
             //                     Err(msg)
             //                 }
             //             }
@@ -1303,7 +1506,7 @@ impl Interpreter {
             //         }
             //     }
             // }
-            Expr::PointerDeref { pointer } => {
+            Expr::PointerDeref { pointer, span } => {
                 // var^ dereferences the pointer
                 let ptr_val = self.evaluate_expr(pointer)?;
                 match ptr_val {
@@ -1312,7 +1515,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("Pointer dereference (^) can only be applied to pointer values, got {:?}", ptr_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1320,22 +1523,29 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_function_call(&mut self, name: &str, args: &Option<Vec<Expr>>) -> Result<Value, String> {
+    fn evaluate_function_call(&mut self, name: &str, args: &Option<Vec<Expr>>, span: Span) -> Result<Value, String> {
         // Try built-in functions first
-        if let Some(result) = self.evaluate_builtin_function(name, args) {
+        if let Some(result) = self.evaluate_builtin_function(name, args, span) {
             return Ok(result);
         }
         
         // Try user-defined functions
         let function = self.functions.get(name)
-            .ok_or_else(|| format!("Function '{}' not found", name))?
+            .ok_or_else(|| {
+                let msg = format!("Function '{}' not found", name);
+                self.error_with_context(&msg, "function call")
+            })?
             .clone();  // Clone to avoid borrow issues
         
         // Evaluate arguments
         let arg_values: Vec<Value> = if let Some(arg_exprs) = args {
             arg_exprs.iter()
                 .map(|expr| self.evaluate_expr(expr))
-                .collect::<Result<_, _>>()?
+                .collect::<Result<_, _>>()
+                .map_err(|e| {
+                    let msg = format!("Error evaluating function arguments: {}", e);
+                    self.error_with_context(&msg, "evaluating function arguments")
+                })?
         } else {
             Vec::new()
         };
@@ -1346,9 +1556,11 @@ impl Interpreter {
                 "Function '{}' expects {} arguments, got {}",
                 name, function.params.len(), arg_values.len()
             );
-            log_error!("{}", msg);
-            return Err(msg);
+            return Err(self.error_with_context(&msg, "function call"));
         }
+        
+        // Push function call onto call stack
+        self.push_call(name, Some(&arg_values));
         
         // Save current variable state (for scoping)
         let saved_variables = self.variables.clone();
@@ -1364,7 +1576,7 @@ impl Interpreter {
         let mut return_value: Option<Value> = None;
         for stmt in &function.body {
             // Check if this is a RETURN statement
-            if let Stmt::Return { value } = stmt {
+            if let Stmt::Return { value, span: _ } = stmt {
                 // Evaluate return expression if provided
                 return_value = Some(if let Some(expr) = value {
                     self.evaluate_expr(expr)?
@@ -1383,6 +1595,9 @@ impl Interpreter {
         self.variables = saved_variables;
         self.variables_type = saved_variable_types;
         
+        // Pop function call from call stack
+        self.pop_call();
+        
         // Return the value (or default if no RETURN statement)
         Ok(return_value.unwrap_or_else(|| {
             // If no RETURN statement, return default value for return type
@@ -1390,13 +1605,13 @@ impl Interpreter {
         }))
     }
 
-    fn evaluate_builtin_function(&mut self, name: &str, args: &Option<Vec<Expr>>) -> Option<Value> {
+    fn evaluate_builtin_function(&mut self, name: &str, args: &Option<Vec<Expr>>, span: Span) -> Option<Value> {
         match name {
             "MOD" => {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("MOD requires 2 arguments, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let arg1 = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1405,14 +1620,14 @@ impl Interpreter {
                     (Value::Integer(l), Value::Integer(r)) => {
                         if *r == 0 {
                             let msg = format!("Modulo by zero");
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return None;
                         }
                         Some(Value::Integer(l % r))
                     }
                     _ => {
                         let msg = format!("MOD requires integer arguments, got {:?} and {:?}", arg1, arg2);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1421,7 +1636,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("DIV expects 2 arguments, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let arg1 = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1430,14 +1645,14 @@ impl Interpreter {
                     (Value::Integer(x), Value::Integer(y)) => {
                         if *y == 0 {
                             let msg = format!("Division by zero in DIV");
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return None;
                         }
                         Some(Value::Integer(x / y))
                     }
                     _ => {
                         let msg = format!("DIV requires integer arguments, got {:?} and {:?}", arg1, arg2);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1446,7 +1661,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("LENGTH expects 1 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1454,7 +1669,7 @@ impl Interpreter {
                     Value::String(s) => Some(Value::Integer(s.len() as i32)),
                     _ => {
                         let msg = format!("LENGTH requires string argument, got {:?}", str_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1463,7 +1678,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("UCASE expects 1 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1472,7 +1687,7 @@ impl Interpreter {
                     Value::Char(c) => Some(Value::String(c.to_uppercase().to_string())),
                     _ => {
                         let msg = format!("UCASE requires string or char argument, got {:?}", str_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1481,7 +1696,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("LCASE expects 1 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1490,7 +1705,7 @@ impl Interpreter {
                     Value::Char(c) => Some(Value::String(c.to_lowercase().to_string())),
                     _ => {
                         let msg = format!("LCASE requires string or char argument, got {:?}", str_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1499,7 +1714,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 3 {
                     let msg = format!("{} expects 3 arguments (string, start, length), got {}", name, args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1519,7 +1734,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("{} expects (STRING, INTEGER, INTEGER) arguments, got {:?}, {:?}, {:?}", name, str_val, start_val, length_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1528,7 +1743,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("RIGHT expects 2 arguments, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1537,7 +1752,7 @@ impl Interpreter {
                     (Value::String(s), Value::Integer(length)) => {
                         if *length < 0 {
                             let msg = format!("RIGHT requires non-negative length, got {}", length);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             return None;
                         }
                         // Handle case where length > string length
@@ -1547,7 +1762,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("RIGHT expects (STRING, INTEGER) arguments, got {:?}, {:?}", str_val, length_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1556,7 +1771,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 0 {
                     let msg = format!("RANDOM expects 0 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 Some(Value::Real(rand::thread_rng().gen_range(0.0..=1.0)))
@@ -1565,7 +1780,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("RAND expects 1 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let max_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1573,7 +1788,7 @@ impl Interpreter {
                     Value::Integer(max) => Some(Value::Real(rand::thread_rng().gen_range(0.0..=*max as f64))),
                     _ => {
                         let msg = format!("RAND requires integer argument, got {:?}", max_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }   
@@ -1582,7 +1797,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("ROUND expects 2 arguments, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1603,7 +1818,7 @@ impl Interpreter {
                     }
                     _ => {
                         let msg = format!("ROUND requires numeric argument, got {:?}", val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1612,7 +1827,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("INT expects 1 argument, got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1621,7 +1836,7 @@ impl Interpreter {
                     Value::Integer(i) => Some(Value::Integer(*i)),
                     _ => {
                         let msg = format!("INT requires numeric argument, got {:?}", val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1630,7 +1845,7 @@ impl Interpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("EOF expects 1 argument (filename), got {}", args_vec.len());
-                    log_error!("{}", msg);
+                    log_error!(msg, span.line);
                     return None;
                 }
                 let filename_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1658,13 +1873,13 @@ impl Interpreter {
                             }
                         } else {
                             let msg = format!("File '{}' is not open", filename);
-                            log_error!("{}", msg);
+                            log_error!(msg, span.line);
                             None
                         }
                     }
                     _ => {
                         let msg = format!("EOF expects STRING argument (filename), got {:?}", filename_val);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         None
                     }
                 }
@@ -1673,7 +1888,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_unary_op(&mut self, op: UnaryOp, expr: &Expr) -> Result<Value, String> {
+    fn evaluate_unary_op(&mut self, op: UnaryOp, expr: &Expr, span: Span) -> Result<Value, String> {
         match op {
             Negate => {
                 let val = self.evaluate_expr(expr)?;
@@ -1682,7 +1897,7 @@ impl Interpreter {
                     Value::Real(l) => Ok(Value::Real(-l)),
                     _ => {
                         let msg = format!("Unsupported negation operation: {:?}", op);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1693,7 +1908,7 @@ impl Interpreter {
                     Value::Boolean(l) => Ok(Value::Boolean(!l)),
                     _ => {
                         let msg = format!("Unsupported NOT operation: {:?}", op);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1701,7 +1916,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_binary_op(&self, op: BinaryOp, left: &Value, right: &Value) -> Result<Value, String> {
+    fn evaluate_binary_op(&self, op: BinaryOp, left: &Value, right: &Value, span: Span) -> Result<Value, String> {
         match op {
             Add => {
                 match (left, right) {
@@ -1713,7 +1928,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 + r)),
                     _ => {
                         let msg = format!("Unsupported addition operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1726,7 +1941,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 - r)),
                     _ => {
                         let msg = format!("Unsupported subtraction operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1739,7 +1954,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 * r)),
                     _ => {
                         let msg = format!("Unsupported multiplication operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1806,7 +2021,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) == *r)),
                     _ => {
                         let msg = format!("Unsupported equality operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1821,7 +2036,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) != *r)),
                     _ => {
                         let msg = format!("Unsupported not equals operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1834,7 +2049,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) < *r)),
                     _ => {
                         let msg = format!("Unsupported less than operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1847,7 +2062,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) > *r)),
                     _ => {
                         let msg = format!("Unsupported greater than operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1860,7 +2075,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) <= *r)),
                     _ => {
                         let msg = format!("Unsupported less than or equal operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1873,7 +2088,7 @@ impl Interpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) >= *r)),
                     _ => {
                         let msg = format!("Unsupported greater than or equal operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1883,7 +2098,7 @@ impl Interpreter {
                     (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l && *r)),
                     _ => {
                         let msg = format!("Unsupported AND operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1893,7 +2108,7 @@ impl Interpreter {
                     (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l || *r)),
                     _ => {
                         let msg = format!("Unsupported OR operation: {:?} with {:?} and {:?}", op, left, right);
-                        log_error!("{}", msg);
+                        log_error!(msg, span.line);
                         Err(msg)
                     }
                 }
