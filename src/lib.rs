@@ -161,6 +161,30 @@ impl PseudocodeEngine {
         self.interpreter.add_input(input);
     }
 
+    /// Clear the input queue
+    #[wasm_bindgen]
+    pub fn clear_inputs(&mut self) {
+        self.interpreter.clear_inputs();
+    }
+
+    /// Get all INPUT statements from code (variable names in order)
+    #[wasm_bindgen]
+    pub fn get_input_statements(&self, code: &str) -> JsValue {
+        let mut parser = Parser::new(code);
+        let statements = match parser.parse_program() {
+            Ok(stmts) => stmts,
+            Err(_) => {
+                // Return empty array if parse fails
+                return serde_wasm_bindgen::to_value(&Vec::<String>::new()).unwrap();
+            }
+        };
+
+        let mut input_vars = Vec::new();
+        extract_input_statements(&statements, &mut input_vars);
+        
+        serde_wasm_bindgen::to_value(&input_vars).unwrap()
+    }
+
     /// Get autocomplete suggestions at a given position
     #[wasm_bindgen]
     pub fn get_completions(&self, code: &str, line: usize, column: usize) -> JsValue {
@@ -241,6 +265,47 @@ fn get_stmt_span(stmt: &crate::ast::Stmt) -> Option<crate::ast::Span> {
         crate::ast::Stmt::FunctionDeclaration { span, .. } => Some(span.clone()),
         crate::ast::Stmt::ProcedureDeclaration { span, .. } => Some(span.clone()),
         _ => None,
+    }
+}
+
+// Helper function to extract all INPUT statements from AST
+fn extract_input_statements(statements: &[crate::ast::Stmt], input_vars: &mut Vec<String>) {
+    for stmt in statements {
+        match stmt {
+            crate::ast::Stmt::Input { name, .. } => {
+                input_vars.push(name.clone());
+            }
+            crate::ast::Stmt::If { then_stmt, else_stmt, .. } => {
+                extract_input_statements(then_stmt, input_vars);
+                if let Some(else_stmts) = else_stmt {
+                    extract_input_statements(else_stmts, input_vars);
+                }
+            }
+            crate::ast::Stmt::While { body, .. } => {
+                extract_input_statements(body, input_vars);
+            }
+            crate::ast::Stmt::For { body, .. } => {
+                extract_input_statements(body, input_vars);
+            }
+            crate::ast::Stmt::RepeatUntil { body, .. } => {
+                extract_input_statements(body, input_vars);
+            }
+            crate::ast::Stmt::Case { cases, otherwise, .. } => {
+                for case in cases {
+                    extract_input_statements(&case.body, input_vars);
+                }
+                if let Some(otherwise_body) = otherwise {
+                    extract_input_statements(otherwise_body, input_vars);
+                }
+            }
+            crate::ast::Stmt::FunctionDeclaration { function, .. } => {
+                extract_input_statements(&function.body, input_vars);
+            }
+            crate::ast::Stmt::ProcedureDeclaration { procedure, .. } => {
+                extract_input_statements(&procedure.body, input_vars);
+            }
+            _ => {}
+        }
     }
 }
 

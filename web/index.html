@@ -29,10 +29,10 @@
         
         <div class="output-container">
             <div class="output-header">
-                <h2>Output</h2>
+                <h2>Terminal</h2>
                 <button id="clearOutputBtn" class="btn btn-small">Clear</button>
             </div>
-            <div id="output" class="output"></div>
+            <div id="terminal" class="terminal"></div>
         </div>
     </div>
     
@@ -53,6 +53,22 @@
         </div>
     </div>
     
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script>
+        // Temporarily store original define to prevent xterm.js from using RequireJS
+        var originalDefine = window.define;
+        window.define = undefined;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script>
+        // Restore define for Monaco Editor
+        if (originalDefine) {
+            window.define = originalDefine;
+        } else {
+            delete window.define;
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     <script type="module" src="main.js"></script>
 </body>

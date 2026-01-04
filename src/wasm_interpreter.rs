@@ -164,6 +164,11 @@ impl WasmInterpreter {
         self.output_buffer.clear();
     }
     
+    /// Clear the input queue
+    pub fn clear_inputs(&mut self) {
+        self.input_queue.clear();
+    }
+    
     /// Add input to the input queue
     pub fn add_input(&mut self, input: String) {
         self.input_queue.push(input);
@@ -518,6 +523,10 @@ impl WasmInterpreter {
                 };
 
                 let input = input.trim();
+                
+                // Echo the input value to the output buffer
+                self.output_buffer.push_str(input);
+                self.output_buffer.push('\n');
 
                 let value = match var_type {
                     Type::INTEGER => {

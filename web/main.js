@@ -5,6 +5,8 @@ let engine = null;
 let editor = null;
 let errorDecorations = [];
 let languageService = null;
+let terminal = null;
+let isExecuting = false;
 
 // Example code
 const examples = {
@@ -252,6 +254,90 @@ function initMonaco() {
     });
 }
 
+// Initialize Terminal
+function initTerminal() {
+    const terminalElement = document.getElementById('terminal');
+    if (!terminalElement) {
+        console.error('Terminal element not found!');
+        return;
+    }
+
+    // Access Terminal from window object to avoid AMD conflicts
+    // xterm.js from CDN exposes Terminal on window
+    if (typeof window.Terminal === 'undefined') {
+        console.error('Terminal class not found. Make sure xterm.js is loaded before this script.');
+        return;
+    }
+    
+    terminal = new window.Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+        theme: {
+            background: '#1e1e1e',
+            foreground: '#d4d4d4',
+            cursor: '#d4d4d4',
+            selection: 'rgba(255, 255, 255, 0.3)',
+            black: '#000000',
+            red: '#f48771',
+            green: '#89d185',
+            yellow: '#d7ba7d',
+            blue: '#569cd6',
+            magenta: '#c586c0',
+            cyan: '#4ec9b0',
+            white: '#d4d4d4',
+            brightBlack: '#808080',
+            brightRed: '#f48771',
+            brightGreen: '#89d185',
+            brightYellow: '#d7ba7d',
+            brightBlue: '#569cd6',
+            brightMagenta: '#c586c0',
+            brightCyan: '#4ec9b0',
+            brightWhite: '#ffffff'
+        }
+    });
+
+    // Try to use FitAddon if available, otherwise terminal works without it
+    let fitAddon = null;
+    
+    // Check various possible export patterns for FitAddon
+    if (typeof window.FitAddon !== 'undefined') {
+        let FitAddonClass = window.FitAddon;
+        
+        // Try FitAddon.FitAddon pattern (common with script tag loading)
+        if (typeof FitAddonClass === 'object' && typeof FitAddonClass.FitAddon === 'function') {
+            FitAddonClass = FitAddonClass.FitAddon;
+        }
+        
+        // Try direct function
+        if (typeof FitAddonClass === 'function') {
+            try {
+                fitAddon = new FitAddonClass();
+                terminal.loadAddon(fitAddon);
+            } catch (e) {
+                console.warn('Failed to initialize FitAddon, terminal will work without auto-resize:', e);
+                fitAddon = null;
+            }
+        }
+    }
+    
+    // If FitAddon not available, terminal will still work fine
+    
+    terminal.open(terminalElement);
+    
+    // Handle window resize - use FitAddon if available, otherwise do nothing
+    // (xterm.js handles basic resizing automatically)
+    if (fitAddon) {
+        fitAddon.fit();
+        window.addEventListener('resize', () => {
+            fitAddon.fit();
+        });
+    }
+
+    terminal.writeln('Pseudocode Terminal Ready');
+    terminal.writeln('Type your code and press "Run" to execute.\r\n');
+}
+
 // Initialize WASM
 async function initWasm() {
     try {
@@ -261,15 +347,37 @@ async function initWasm() {
         console.log('WASM initialized successfully');
     } catch (error) {
         console.error('Failed to initialize WASM:', error);
-        showOutput('Error: Failed to load WASM module. Make sure you have built the WASM package.', 'error');
+        if (terminal) {
+            terminal.writeln(`\x1b[31mError: Failed to load WASM module. Make sure you have built the WASM package.\x1b[0m`);
+        }
     }
 }
 
-// Show output in output panel
+// Show output in terminal
 function showOutput(text, type = 'info') {
-    const outputDiv = document.getElementById('output');
-    outputDiv.textContent = text;
-    outputDiv.className = `output ${type}`;
+    if (!terminal) return;
+    
+    // Clear terminal if starting new execution
+    if (type === 'info' && text === 'Running...') {
+        terminal.clear();
+        terminal.writeln('Executing program...\r\n');
+        return;
+    }
+    
+    if (text) {
+        const lines = text.split('\n');
+        lines.forEach((line, index) => {
+            if (line.trim() || index < lines.length - 1) {
+                if (type === 'error') {
+                    terminal.writeln(`\x1b[31m${line}\x1b[0m`);
+                } else if (type === 'success') {
+                    terminal.writeln(line);
+                } else {
+                    terminal.writeln(line);
+                }
+            }
+        });
+    }
 }
 
 // Clear error decorations
@@ -299,20 +407,99 @@ function highlightErrors(errors) {
     errorDecorations = editor.deltaDecorations([], decorations);
 }
 
-// Run code
+// Prompt for input in terminal (returns a Promise)
+function promptInput(promptText) {
+    return new Promise((resolve) => {
+        if (!terminal) {
+            resolve('');
+            return;
+        }
+        
+        terminal.write(`\r\n\x1b[33m${promptText}\x1b[0m `);
+        
+        let inputBuffer = '';
+        let isPrompting = true;
+        let disposable = null;
+        
+        const cleanup = () => {
+            isPrompting = false;
+            if (disposable && typeof disposable.dispose === 'function') {
+                disposable.dispose();
+                disposable = null;
+            }
+        };
+        
+        const dataHandler = (data) => {
+            if (!isPrompting) return;
+            
+            // Handle Enter key
+            if (data === '\r' || data === '\n' || data === '\r\n') {
+                terminal.write('\r\n');
+                cleanup();
+                resolve(inputBuffer);
+                return;
+            }
+            
+            // Handle Backspace
+            if (data === '\x7f' || data === '\b') {
+                if (inputBuffer.length > 0) {
+                    inputBuffer = inputBuffer.slice(0, -1);
+                    terminal.write('\b \b');
+                }
+                return;
+            }
+            
+            // Handle Ctrl+C
+            if (data === '\x03') {
+                terminal.write('^C\r\n');
+                cleanup();
+                resolve('');
+                return;
+            }
+            
+            // Add character to buffer and echo to terminal
+            if (data.length === 1 && data >= ' ') {
+                inputBuffer += data;
+                terminal.write(data);
+            }
+        };
+        
+        // onData returns an IDisposable object
+        disposable = terminal.onData(dataHandler);
+    });
+}
+
+// Run code with interactive terminal input
 async function runCode() {
+    if (isExecuting) {
+        if (terminal) {
+            terminal.writeln('\r\n\x1b[31mExecution already in progress...\x1b[0m');
+        }
+        return;
+    }
+    
     if (!engine) {
-        showOutput('Error: WASM not initialized', 'error');
+        if (terminal) {
+            terminal.writeln('\x1b[31mError: WASM not initialized\x1b[0m');
+        }
         return;
     }
     
     const code = editor.getValue();
     if (!code.trim()) {
-        showOutput('No code to execute', 'info');
+        if (terminal) {
+            terminal.writeln('\x1b[33mNo code to execute\x1b[0m');
+        }
         return;
     }
     
+    isExecuting = true;
     clearErrorDecorations();
+    
+    if (terminal) {
+        terminal.clear();
+        terminal.writeln('Executing program...\r\n');
+    }
     
     try {
         // Get all INPUT statements from the code
@@ -320,44 +507,66 @@ async function runCode() {
         const inputVarsArray = Array.isArray(inputVars) ? inputVars : [];
         
         if (inputVarsArray.length > 0) {
-            // Show input modal to collect values
-            showInputModal(inputVarsArray, () => {
-                // Callback when inputs are submitted - execute the code
-                executeCodeWithInputs(code);
-            });
-        } else {
-            // No inputs needed, execute directly
-            executeCodeWithInputs(code);
+            // Clear input queue
+            engine.clear_inputs();
+            
+            // Collect inputs interactively in terminal
+            const inputs = [];
+            for (const varName of inputVarsArray) {
+                const inputValue = await promptInput(`Enter value for ${varName}:`);
+                inputs.push(inputValue);
+            }
+            
+            // Add all inputs to the queue (in reverse order since queue uses LIFO)
+            for (let i = inputs.length - 1; i >= 0; i--) {
+                engine.add_input(inputs[i]);
+            }
         }
+        
+        // Execute the code
+        executeCodeWithInputs(code);
     } catch (error) {
-        showOutput(`Error: ${error.message}`, 'error');
+        if (terminal) {
+            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
+        }
         console.error('Execution error:', error);
+    } finally {
+        isExecuting = false;
     }
 }
 
 // Execute code with inputs already in queue
 function executeCodeWithInputs(code) {
-    showOutput('Running...', 'info');
-    
     try {
         const result = engine.execute(code);
-        // result is already a JavaScript object (JsValue), not a JSON string
         const executionResult = result;
         
         let outputText = executionResult.output || '';
         
         if (executionResult.errors && executionResult.errors.length > 0) {
-            outputText += '\n\n--- Errors ---\n';
+            terminal.writeln('\r\n\x1b[31m--- Errors ---\x1b[0m');
             executionResult.errors.forEach(error => {
-                outputText += `Line ${error.line}: ${error.message}\n`;
+                terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
             });
             highlightErrors(executionResult.errors);
-            showOutput(outputText, 'error');
+        } else if (outputText) {
+            // Output is already in the buffer from the interpreter
+            // Just write it to terminal
+            const lines = outputText.split('\n');
+            lines.forEach(line => {
+                if (line.trim() || lines.indexOf(line) < lines.length - 1) {
+                    terminal.writeln(line);
+                }
+            });
         } else {
-            showOutput(outputText || '(No output)', 'success');
+            terminal.writeln('\x1b[33m(No output)\x1b[0m');
         }
+        
+        terminal.writeln('\r\n\x1b[32mProgram execution complete.\x1b[0m\r\n');
     } catch (error) {
-        showOutput(`Error: ${error.message}`, 'error');
+        if (terminal) {
+            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
+        }
         console.error('Execution error:', error);
     }
 }
@@ -461,13 +670,17 @@ function showInputModal(inputVars, onSubmit) {
 // Check syntax
 async function checkSyntax() {
     if (!engine) {
-        showOutput('Error: WASM not initialized', 'error');
+        if (terminal) {
+            terminal.writeln('\x1b[31mError: WASM not initialized\x1b[0m');
+        }
         return;
     }
     
     const code = editor.getValue();
     if (!code.trim()) {
-        showOutput('No code to check', 'info');
+        if (terminal) {
+            terminal.writeln('\x1b[33mNo code to check\x1b[0m');
+        }
         return;
     }
     
@@ -475,21 +688,23 @@ async function checkSyntax() {
     
     try {
         const result = engine.check_syntax(code);
-        // result is already a JavaScript object (JsValue), not a JSON string
         const checkResult = result;
         
-        if (checkResult.valid) {
-            showOutput('Syntax check passed!', 'success');
-        } else {
-            let errorText = 'Syntax errors found:\n';
-            checkResult.errors.forEach(error => {
-                errorText += `Line ${error.line}: ${error.message}\n`;
-            });
-            highlightErrors(checkResult.errors);
-            showOutput(errorText, 'error');
+        if (terminal) {
+            if (checkResult.valid) {
+                terminal.writeln('\x1b[32mSyntax check passed!\x1b[0m');
+            } else {
+                terminal.writeln('\x1b[31mSyntax errors found:\x1b[0m');
+                checkResult.errors.forEach(error => {
+                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
+                });
+                highlightErrors(checkResult.errors);
+            }
         }
     } catch (error) {
-        showOutput(`Error: ${error.message}`, 'error');
+        if (terminal) {
+            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
+        }
         console.error('Syntax check error:', error);
     }
 }
@@ -500,12 +715,20 @@ function clearEditor() {
         editor.setValue('');
         clearErrorDecorations();
     }
-    showOutput('', 'info');
+    if (terminal) {
+        terminal.clear();
+        terminal.writeln('Pseudocode Terminal Ready');
+        terminal.writeln('Type your code and press "Run" to execute.\r\n');
+    }
 }
 
 // Clear output
 function clearOutput() {
-    showOutput('', 'info');
+    if (terminal) {
+        terminal.clear();
+        terminal.writeln('Pseudocode Terminal Ready');
+        terminal.writeln('Type your code and press "Run" to execute.\r\n');
+    }
     clearErrorDecorations();
 }
 
@@ -516,7 +739,6 @@ function loadExample() {
     if (exampleName && examples[exampleName] && editor) {
         editor.setValue(examples[exampleName]);
         clearErrorDecorations();
-        showOutput('', 'info');
     }
 }
 
@@ -530,11 +752,59 @@ function toggleTheme() {
         if (editor) {
             monaco.editor.setTheme('pseudocode-dark');
         }
+        if (terminal) {
+            terminal.options.theme = {
+                background: '#1e1e1e',
+                foreground: '#d4d4d4',
+                cursor: '#d4d4d4',
+                selection: 'rgba(255, 255, 255, 0.3)',
+                black: '#000000',
+                red: '#f48771',
+                green: '#89d185',
+                yellow: '#d7ba7d',
+                blue: '#569cd6',
+                magenta: '#c586c0',
+                cyan: '#4ec9b0',
+                white: '#d4d4d4',
+                brightBlack: '#808080',
+                brightRed: '#f48771',
+                brightGreen: '#89d185',
+                brightYellow: '#d7ba7d',
+                brightBlue: '#569cd6',
+                brightMagenta: '#c586c0',
+                brightCyan: '#4ec9b0',
+                brightWhite: '#ffffff'
+            };
+        }
         themeBtn.textContent = 'Dark';
     } else {
         body.classList.add('light');
         if (editor) {
             monaco.editor.setTheme('pseudocode-light');
+        }
+        if (terminal) {
+            terminal.options.theme = {
+                background: '#ffffff',
+                foreground: '#1e1e1e',
+                cursor: '#1e1e1e',
+                selection: 'rgba(0, 0, 0, 0.3)',
+                black: '#000000',
+                red: '#a31515',
+                green: '#098658',
+                yellow: '#d7ba7d',
+                blue: '#0000ff',
+                magenta: '#811f3f',
+                cyan: '#267f99',
+                white: '#1e1e1e',
+                brightBlack: '#808080',
+                brightRed: '#a31515',
+                brightGreen: '#098658',
+                brightYellow: '#d7ba7d',
+                brightBlue: '#0000ff',
+                brightMagenta: '#811f3f',
+                brightCyan: '#267f99',
+                brightWhite: '#000000'
+            };
         }
         themeBtn.textContent = 'Light';
     }
@@ -555,6 +825,7 @@ document.head.appendChild(style);
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
+    initTerminal();
     initMonaco();
     await initWasm();
     

@@ -2,5 +2,4 @@
 
 build-wasm.bat
 build-wasm.sh
-deploy-pages.bat
-deploy-pages.sh
+deploy.bat
