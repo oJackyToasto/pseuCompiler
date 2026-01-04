@@ -1,18 +1,17 @@
 use core::str;
 use std::collections::HashMap;
-use log::*;
 use rand::Rng;
 
-use crate::{ast::{Expr, Function, Procedure, Stmt, Stmt::*, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*, FileMode}, log_error};
+use crate::{ast::{Expr, Function, Procedure, Stmt, Type, BinaryOp, BinaryOp::*, UnaryOp, UnaryOp::*, FileMode, TypeDeclarationVariant}, log_error};
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write, Seek, SeekFrom, BufRead};
 
 #[derive(Debug, Clone)]
-enum ControlFlow {
+enum _ControlFlow {
     Return(Value),  // Return value from function
 }
 
-type InterpreterResult<T> = Result<T, String>;
+type _InterpreterResult<T> = Result<T, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -135,6 +134,30 @@ impl Interpreter {
                         self.variables_type.insert(name.clone(), Type::ARRAY { dimensions: dimensions.clone(), element_type: element_type.clone() });
                         Ok(())
                     }
+                    Type::Custom(custom_name) => {
+                        // Resolve the custom type and clone it to release the borrow
+                        let resolved_type = self.type_definitions.get(custom_name)
+                            .ok_or_else(|| format!("Type {} not found", custom_name))?
+                            .clone();
+                        let value = if let Some(expr) = initial_value {
+                            self.evaluate_expr(expr)?
+                        } else {
+                            self.default_value(&resolved_type)?
+                        };
+                        self.variables.insert(name.clone(), value);
+                        self.variables_type.insert(name.clone(), resolved_type);
+                        Ok(())
+                    }
+                    Type::Record { .. } | Type::Enum { .. } | Type::Pointer { .. } | Type::Set { .. } => {
+                        let value = if let Some(expr) = initial_value {
+                            self.evaluate_expr(expr)?
+                        } else {
+                            self.default_value(type_name)?
+                        };
+                        self.variables.insert(name.clone(), value);
+                        self.variables_type.insert(name.clone(), type_name.clone());
+                        Ok(())
+                    }
                     _ => {
                         let msg = format!("Unsupported type: {:?}", type_name);
                         log_error!("{}", msg);
@@ -142,14 +165,89 @@ impl Interpreter {
                     }
                 }
             }
+            Stmt::Define { name, values, type_name } => {
+                let type_def = self.type_definitions.get(type_name)
+                    .ok_or_else(|| format!("Type {} not found", type_name))?;
+                
+                let value = match type_def {
+                    Type::Set { element_type } => {
+                        // Parse string values into Value types based on element_type
+                        let mut set_elements = Vec::new();
+                        for val_str in values {
+                            let parsed_value = self.parse_value_string(&val_str, element_type)?;
+                            set_elements.push(parsed_value);
+                        }
+                        Value::Set {
+                            element_type: element_type.clone(),
+                            elements: set_elements,
+                        }
+                    }
+                    _ => {
+                        let msg = format!("Define statement for type {} is not supported", type_name);
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                };
+                
+                self.variables.insert(name.clone(), value);
+                self.variables_type.insert(name.clone(), type_def.clone());
+                Ok(())
+            }
             Stmt::Assign { name, indices, expression } => {
                 let value = self.evaluate_expr(expression)?;
+
+                // Check if this is a field access assignment (obj.field)
+                if let Some(dot_pos) = name.find('.') {
+                    let (obj_name, field_name) = name.split_at(dot_pos);
+                    let field_name = &field_name[1..]; // Skip the dot
+                    
+                    // Get the record
+                    let record = self.variables.get_mut(obj_name)
+                        .ok_or_else(|| format!("Variable '{}' not found", obj_name))?;
+                    
+                    match record {
+                        Value::Record { fields, .. } => {
+                            // Update the field
+                            fields.insert(field_name.to_string(), value);
+                            return Ok(());
+                        }
+                        _ => {
+                            let msg = format!("Field access on non-record variable: {}", obj_name);
+                            log_error!("{}", msg);
+                            return Err(msg);
+                        }
+                    }
+                }
+                
+                // Check if this is a pointer dereference assignment (ptr^)
+                if name.ends_with('^') {
+                    let ptr_name = &name[..name.len() - 1];
+                    
+                    // Get the pointer variable
+                    let ptr = self.variables.get_mut(ptr_name)
+                        .ok_or_else(|| format!("Pointer variable '{}' not found", ptr_name))?;
+                    
+                    match ptr {
+                        Value::Pointer { target, .. } => {
+                            // Update the value the pointer points to
+                            **target = value;
+                            return Ok(());
+                        }
+                        _ => {
+                            let msg = format!("Pointer dereference assignment on non-pointer variable: {}", ptr_name);
+                            log_error!("{}", msg);
+                            return Err(msg);
+                        }
+                    }
+                }
+                
+
                 if let Some(indices_exprs) = indices {
                     // Evaluate indices FIRST
                     let index_values : Vec<Value> = indices_exprs.iter()
                         .map(|expr| self.evaluate_expr(expr))
                         .collect::<Result<_, _>>()?;
-            
+                
                     let mut index_pos = Vec::new();
                     for idx_val in index_values {
                         match idx_val { 
@@ -169,9 +267,14 @@ impl Interpreter {
                         }
                     }
                     
-                    // Get dimensions FIRST (immutable borrow)
+                    // Check if it's an array (sets are immutable, so no assignment)
                     let dimensions = match self.variables.get(name) {
                         Some(Value::Array { dimensions, .. }) => dimensions.clone(),
+                        Some(Value::Set { .. }) => {
+                            let msg = format!("Cannot assign to set '{}' - sets are immutable", name);
+                            log_error!("{}", msg);
+                            return Err(msg);
+                        }
                         Some(_) => return Err(format!("Variable '{}' is not an array", name)),
                         None => return Err(format!("Array {} not found", name)),
                     };
@@ -490,7 +593,7 @@ impl Interpreter {
                 self.variables_type = saved_vars_type;
                 Ok(())
             }
-            Stmt::Return { value } => {
+            Stmt::Return { value: _value } => {
                 // RETURN should only be used inside functions
                 // This case handles RETURN in the main program (which is an error)
                 let msg = "RETURN statement outside of function".to_string();
@@ -584,25 +687,23 @@ impl Interpreter {
                             .map_err(|e| format!("Failed to read from file '{}': {}", filename_str, e))?;
                     },
                     FileHandle::Random(file) => {
-                        // For random access files, read bytes until newline
-                        let mut buffer = vec![0u8; 1];
+                        // Read line efficiently using a buffer
+                        let mut buffer = [0u8; 1024];
+                        let mut bytes_read = 0;
                         loop {
-                            match file.read_exact(&mut buffer) {
-                                Ok(_) => {
-                                    let ch = buffer[0] as char;
-                                    if ch == '\n' {
-                                        break;
+                            match file.read(&mut buffer[bytes_read..]) {
+                                Ok(0) => break, // EOF
+                                Ok(n) => {
+                                    bytes_read += n;
+                                    if buffer[..bytes_read].contains(&b'\n') {
+                                        break; // Found newline
                                     }
-                                    line.push(ch);
-                                },
-                                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                                    break; // End of file
-                                },
-                                Err(e) => {
-                                    return Err(format!("Failed to read from file '{}': {}", filename_str, e));
                                 }
+                                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                                Err(e) => return Err(format!("Failed to read from file '{}': {}", filename_str, e)),
                             }
                         }
+                        line = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
                     },
                     FileHandle::Write(_) => {
                         let msg = format!("Cannot read from file '{}' opened in WRITE mode", filename_str);
@@ -718,8 +819,7 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::GetRecord { filename, variable } => {
-                // GetRecord reads a fixed-length record (typically for binary/random access files)
-                // For simplicity, we'll treat it like ReadFile for now
+                // GetRecord reads a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
@@ -730,16 +830,39 @@ impl Interpreter {
                     }
                 };
                 
-                // For now, treat GetRecord as ReadFile
-                // TODO: Implement proper record-based reading
-                self.evaluate_stmt(&Stmt::ReadFile {
-                    filename: Box::new(Expr::String(filename_str.clone())),
-                    name: variable.clone(),
-                })
+                let file_handle = self.open_files.get_mut(&filename_str)
+                    .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
+                
+                match file_handle {
+                    FileHandle::Random(file) => {
+                        // Read fixed-length record (you might need to determine record size)
+                        // For now, read a line as a simple implementation
+                        let mut buffer = vec![0u8; 256]; // Fixed record size
+                        match file.read_exact(&mut buffer) {
+                            Ok(_) => {
+                                let record = String::from_utf8_lossy(&buffer).trim_end().to_string();
+                                // Store in variable (assuming it's a record type)
+                                // This is simplified - you might need to parse the record based on type
+                                self.variables.insert(variable.clone(), Value::String(record));
+                            }
+                            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                                return Err(format!("End of file reached in GETRECORD"));
+                            }
+                            Err(e) => {
+                                return Err(format!("Failed to read record from file '{}': {}", filename_str, e));
+                            }
+                        }
+                    }
+                    _ => {
+                        let msg = format!("GETRECORD only works with files opened in RANDOM mode");
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                }
+                Ok(())
             }
             Stmt::PutRecord { filename, variable } => {
-                // PutRecord writes a fixed-length record
-                // For simplicity, we'll treat it like WriteFile for now
+                // PutRecord writes a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
@@ -750,21 +873,104 @@ impl Interpreter {
                     }
                 };
                 
-                // Get variable value (not used but kept for future record implementation)
-                let _var_value = self.variables.get(variable)
+                // Get variable value to write
+                let var_value = self.variables.get(variable)
                     .ok_or_else(|| format!("Variable '{}' not found", variable))?;
                 
-                // For now, treat PutRecord as WriteFile
-                // TODO: Implement proper record-based writing
-                self.evaluate_stmt(&Stmt::WriteFile {
-                    filename: Box::new(Expr::String(filename_str)),
-                    exprs: vec![Expr::Variable(variable.clone())],
-                })
+                // Convert variable to string representation
+                let record_data = self.value_to_string(var_value);
+                
+                // Get file handle
+                let file_handle = self.open_files.get_mut(&filename_str)
+                    .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
+                
+                match file_handle {
+                    FileHandle::Random(file) => {
+                        // Write fixed-length record (pad or truncate to fixed size)
+                        // For simplicity, we'll use a fixed size of 256 bytes
+                        // In a real implementation, you'd determine record size from type definition
+                        let mut buffer = vec![0u8; 256];
+                        let data_bytes = record_data.as_bytes();
+                        let copy_len = data_bytes.len().min(256);
+                        buffer[..copy_len].copy_from_slice(&data_bytes[..copy_len]);
+                        
+                        file.write_all(&buffer)
+                            .map_err(|e| format!("Failed to write record to file '{}': {}", filename_str, e))?;
+                        file.flush()
+                            .map_err(|e| format!("Failed to flush file '{}': {}", filename_str, e))?;
+                    }
+                    _ => {
+                        let msg = format!("PUTRECORD only works with files opened in RANDOM mode");
+                        log_error!("{}", msg);
+                        return Err(msg);
+                    }
+                }
+                
+                Ok(())
+            }
+
+            Stmt::TypeDeclaration { name, variant } => {
+                let type_def = match variant {
+                    TypeDeclarationVariant::Record { fields } => {
+                        Type::Record {
+                            name: name.clone(),
+                            fields: fields.clone(),
+                        }
+                    }
+                    TypeDeclarationVariant::Enum { values } => {
+                        Type::Enum {
+                            name: name.clone(),
+                            values: values.clone(),
+                        }
+                    }
+                    TypeDeclarationVariant::Pointer { points_to } => {
+                        Type::Pointer {
+                            points_to: points_to.clone(),
+                        }
+                    }
+                    TypeDeclarationVariant::Set { element_type } => {
+                        Type::Set {
+                            element_type: element_type.clone(),
+                        }
+                    }
+                };
+                
+                self.type_definitions.insert(name.clone(), type_def);
+                Ok(())
+            }
+        }
+    }
+
+    fn parse_value_string(&self, val_str: &str, element_type: &Type) -> Result<Value, String> {
+        match element_type {
+            Type::INTEGER => {
+                val_str.parse::<i32>()
+                    .map(Value::Integer)
+                    .map_err(|_| format!("Invalid integer: {}", val_str))
+            }
+            Type::REAL => {
+                val_str.parse::<f64>()
+                    .map(Value::Real)
+                    .map_err(|_| format!("Invalid real: {}", val_str))
+            }
+            Type::STRING => {
+                Ok(Value::String(val_str.to_string()))
+            }
+            Type::CHAR => {
+                // Remove quotes if present ('A' -> A)
+                let ch = val_str.trim_matches('\'').chars().next()
+                    .ok_or_else(|| format!("Invalid char: {}", val_str))?;
+                Ok(Value::Char(ch))
+            }
+            Type::BOOLEAN => {
+                match val_str.to_uppercase().as_str() {
+                    "TRUE" => Ok(Value::Boolean(true)),
+                    "FALSE" => Ok(Value::Boolean(false)),
+                    _ => Err(format!("Invalid boolean: {}", val_str))
+                }
             }
             _ => {
-                let msg = format!("Unsupported statement: {:?}", stmt);
-                log_error!("{}", msg);
-                Err(msg)
+                Err(format!("Unsupported element type for set: {:?}", element_type))
             }
         }
     }
@@ -810,6 +1016,51 @@ impl Interpreter {
             Type::CHAR => Ok(Value::Char('\0')),
             Type::STRING => Ok(Value::String("".to_string())),
             Type::DATE => Ok(Value::Date("".to_string())),
+            
+            Type::Custom(name) => {
+                let resolved_type = self.type_definitions.get(name)
+                    .ok_or_else(|| format!("Type {} not found", name))?;
+                self.default_value(resolved_type)
+            }
+            
+            Type::Record { name, fields } => {
+                let mut field_values = HashMap::new();
+                for field in fields {
+                    field_values.insert(field.name.clone(), self.default_value(&field.type_name)?);
+                }
+                Ok(Value::Record {
+                    type_name: name.clone(),
+                    fields: field_values,
+                })
+            }
+
+            Type::Enum { name, values } => {
+                if values.is_empty() {
+                    let msg = format!("Enum type {} has no values", name);
+                    log_error!("{}", msg);
+                    return Err(msg);
+                }
+                Ok(Value::Enum {
+                    type_name: name.clone(),
+                    value: values[0].clone(),
+                })
+            }
+
+            Type::Pointer { points_to } => {
+                let target_value = self.default_value(points_to)?;
+                Ok(Value::Pointer {
+                    points_to: points_to.clone(),
+                    target: Box::new(target_value),
+                })
+            }
+
+            Type::Set { element_type } => {
+                Ok(Value::Set {
+                    element_type: element_type.clone(),
+                    elements: Vec::new(),
+                })
+            }
+            
             _ => {
                 let msg = format!("Unsupported type: {:?}", type_name);
                 log_error!("{}", msg);
@@ -875,31 +1126,31 @@ impl Interpreter {
                 let index_vals : Vec<Value> = indices.iter()
                     .map(|idx| self.evaluate_expr(idx))
                     .collect::<Result<_, _>>()?;
-
+            
                 let array_val = self.variables.get(array)
-                    .ok_or_else(|| format!("Array {} not found", array))?;
-
+                    .ok_or_else(|| format!("Variable {} not found", array))?;
+            
                 let mut index_positions = Vec::new();
                 for idx_val in index_vals {
                     match idx_val {
                         Value::Integer(i) => {
                             if i < 1 {
-                                let msg = format!("Array index must be >= 1, got {}", i);
+                                let msg = format!("Index must be >= 1, got {}", i);
                                 log_error!("{}", msg);
                                 return Err(msg);
                             }
                             index_positions.push((i - 1) as usize);  // Convert 1-based to 0-based
                         }
                         _ => {
-                            let msg = format!("Array index must be integer, got {:?}", idx_val);
+                            let msg = format!("Index must be integer, got {:?}", idx_val);
                             log_error!("{}", msg);
                             return Err(msg);
                         }
                     }
                 }
-
+            
                 match array_val {
-                    Value::Array { element_type, dimensions, data } => {
+                    Value::Array { dimensions, data, .. } => {
                         let flat_index = self.calculate_array_index(index_positions, dimensions)?;
                         if flat_index >= data.len() {
                             let msg = format!("Array index out of bounds: {}", flat_index);
@@ -908,17 +1159,163 @@ impl Interpreter {
                         }
                         Ok(data[flat_index].clone())
                     }
+                    Value::Set { elements, .. } => {
+                        // Sets only support single index
+                        if index_positions.len() != 1 {
+                            let msg = format!("Set access requires exactly 1 index, got {}", index_positions.len());
+                            log_error!("{}", msg);
+                            return Err(msg);
+                        }
+                        let index = index_positions[0];
+                        if index >= elements.len() {
+                            let msg = format!("Set index out of bounds: {}", index);
+                            log_error!("{}", msg);
+                            return Err(msg);
+                        }
+                        Ok(elements[index].clone())
+                    }
+                    Value::Enum { .. } => {
+                        // Enums don't support indexed access - they're single values
+                        let msg = format!("Cannot use indexed access on enum value: {}", array);
+                        log_error!("{}", msg);
+                        Err(msg)
+                    }
                     _ => {
-                        let msg = format!("Array access on non-array variable: {}", array);
+                        let msg = format!("Indexed access on unsupported type: {}", array);
                         log_error!("{}", msg);
                         Err(msg)
                     }
                 }
             }
-            _ => {
-                let msg = format!("Unsupported expression: {:?}", expr);
-                log_error!("Unsupported expression: {:?}", expr);
-                Err(msg)
+            Expr::FieldAccess { object, field } => {
+                let object_val = self.evaluate_expr(object)?;
+                match object_val {
+                    Value::Record { type_name, fields } => {
+                        fields.get(field)
+                            .cloned()
+                            .ok_or_else(|| format!("Field '{}' not found in record of type '{}'", field, type_name))
+                    }
+                    _ => {
+                        let msg = format!("Field access on non-record value: {:?}", object_val);
+                        log_error!("{}", msg);
+                        Err(msg)
+                    }
+                }
+            }
+            Expr::PointerRef { target } => {
+                // Match on the expression to extract variable name
+                match target.as_ref() {
+                    Expr::Variable(var_name) => {
+                        // Get the variable's type
+                        let var_type = self.variables_type.get(var_name)
+                            .ok_or_else(|| format!("Variable '{}' not found for pointer reference", var_name))?;
+                        
+                        // Get the variable's value
+                        let var_value = self.variables.get(var_name)
+                            .ok_or_else(|| format!("Variable '{}' not found", var_name))?;
+                        
+                        Ok(Value::Pointer {
+                            points_to: Box::new(var_type.clone()),
+                            target: Box::new(var_value.clone()),
+                        })
+                    }
+                    _ => {
+                        let msg = format!("Pointer reference (^) can only be applied to variables, got {:?}", target);
+                        log_error!("{}", msg);
+                        Err(msg)
+                    }
+                }
+            }
+            // Expr::SetAccess { set, element } => {
+            //     // Treat element as an index (like array access)
+            //     let set_val = self.evaluate_expr(set)?;
+            //     let index_val = self.evaluate_expr(element)?;
+                
+            //     let index = match index_val {
+            //         Value::Integer(i) => {
+            //             if i < 1 {
+            //                 let msg = format!("Set index must be >= 1, got {}", i);
+            //                 log_error!("{}", msg);
+            //                 return Err(msg);
+            //             }
+            //             (i - 1) as usize  // Convert 1-based to 0-based
+            //         }
+            //         _ => {
+            //             let msg = format!("Set index must be integer, got {:?}", index_val);
+            //             log_error!("{}", msg);
+            //             return Err(msg);
+            //         }
+            //     };
+                
+            //     match set_val {
+            //         Value::Set { elements, .. } => {
+            //             if index >= elements.len() {
+            //                 let msg = format!("Set index out of bounds: {}", index);
+            //                 log_error!("{}", msg);
+            //                 return Err(msg);
+            //             }
+            //             Ok(elements[index].clone())
+            //         }
+            //         _ => {
+            //             let msg = format!("Set access on non-set value: {:?}", set_val);
+            //             log_error!("{}", msg);
+            //             Err(msg)
+            //         }
+            //     }
+            // }
+            // Expr::EnumAccess { enum_type, value } => {
+            //     // Get the enum type definition
+            //     let type_def = self.type_definitions.get(enum_type)
+            //         .ok_or_else(|| format!("Enum type {} not found", enum_type))?;
+                
+            //     match type_def {
+            //         Type::Enum { values, .. } => {
+            //             // Check if value is a valid enum value name
+            //             if values.contains(value) {
+            //                 Ok(Value::Enum {
+            //                     type_name: enum_type.clone(),
+            //                     value: value.clone(),
+            //                 })
+            //             } else {
+            //                 // Try to interpret as index
+            //                 if let Ok(idx) = value.parse::<usize>() {
+            //                     if idx >= 1 && idx <= values.len() {
+            //                         Ok(Value::Enum {
+            //                             type_name: enum_type.clone(),
+            //                             value: values[idx - 1].clone(),  // 1-based to 0-based
+            //                         })
+            //                     } else {
+            //                         let msg = format!("Enum index out of bounds: {}", idx);
+            //                         log_error!("{}", msg);
+            //                         Err(msg)
+            //                     }
+            //                 } else {
+            //                     let msg = format!("Invalid enum value '{}' for type '{}'", value, enum_type);
+            //                     log_error!("{}", msg);
+            //                     Err(msg)
+            //                 }
+            //             }
+            //         }
+            //         _ => {
+            //             let msg = format!("EnumAccess on non-enum type: {}", enum_type);
+            //             log_error!("{}", msg);
+            //             Err(msg)
+            //         }
+            //     }
+            // }
+            Expr::PointerDeref { pointer } => {
+                // var^ dereferences the pointer
+                let ptr_val = self.evaluate_expr(pointer)?;
+                match ptr_val {
+                    Value::Pointer { target, .. } => {
+                        Ok(*target)  // Return the value the pointer points to
+                    }
+                    _ => {
+                        let msg = format!("Pointer dereference (^) can only be applied to pointer values, got {:?}", ptr_val);
+                        log_error!("{}", msg);
+                        Err(msg)
+                    }
+                }
             }
         }
     }
@@ -1244,6 +1641,7 @@ impl Interpreter {
                             // Check if we're at EOF
                             match file_handle {
                                 FileHandle::Read(reader) => {
+                                    // Try to peek at the buffer - if it's empty, we're at EOF
                                     let buffer = reader.fill_buf().ok()?;
                                     Some(Value::Boolean(buffer.is_empty()))
                                 },
@@ -1299,11 +1697,6 @@ impl Interpreter {
                         Err(msg)
                     }
                 }
-            }
-            _ => {
-                let msg = format!("Unsupported unary operation: {:?}", op);
-                log_error!("{}", msg);
-                Err(msg)
             }
         }
     }
@@ -1380,7 +1773,7 @@ impl Interpreter {
                     _ => Err("Invalid operands for division".to_string()),
                 }
             }
-            Div => {
+            _Div => {
                 match (left, right) {
                     (Value::Integer(a), Value::Integer(b)) => {
                         if *b == 0 {
@@ -1504,11 +1897,6 @@ impl Interpreter {
                         Err(msg)
                     }
                 }
-            }
-            _ => {
-                let msg = format!("Unsupported binary operation: {:?} with {:?} and {:?}", op, left, right);
-                log_error!("{}", msg);
-                Err(msg)
             }
         }
     }

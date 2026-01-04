@@ -31,15 +31,15 @@ pub enum Expr {
         target: Box<Expr>,
     },
 
-    SetAccess {
-        set: Box<Expr>,
-        element: Box<Expr>,
-    },
+    // SetAccess {
+    //     set: Box<Expr>,
+    //     element: Box<Expr>,
+    // },
 
-    EnumAccess {
-        enum_type: String,
-        value: String,
-    },
+    // EnumAccess {
+    //     enum_type: String,
+    //     value: String,
+    // },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,7 +48,7 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
-    Div,  // Integer division
+    _Div,  // Integer division
     Modulus,
     Equals,
     NotEquals,
@@ -69,7 +69,7 @@ impl BinaryOp {
             | BinaryOp::LessThan | BinaryOp::GreaterThan
             | BinaryOp::LessThanOrEqual | BinaryOp::GreaterThanOrEqual => 3,
             BinaryOp::Add | BinaryOp::Subtract => 4,
-            BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Div | BinaryOp::Modulus => 5,
+            BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::_Div | BinaryOp::Modulus => 5,
         }
     }
 }
@@ -268,6 +268,10 @@ pub enum Type {
     Enum {
         name: String,
         values: Vec<String>,
+    },
+    Record {
+        name: String,
+        fields: Vec<TypeField>,
     },
     Pointer {
         points_to: Box<Type>,

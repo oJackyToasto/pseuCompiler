@@ -48,7 +48,7 @@ impl Parser {
         error_msg
     }
 
-    fn next_token(&mut self) -> &Token {
+    fn _next_token(&mut self) -> &Token {
         self.pos += 1;
         &self.tokens[self.pos]
     }
@@ -86,7 +86,7 @@ impl Parser {
         }
     }
 
-    fn parse_variable(&mut self) -> Result<Expr, String> {
+    fn _parse_variable(&mut self) -> Result<Expr, String> {
         match self.current_token() {
             Token::Identifier(v) => {
                 let variable = v.clone();
@@ -130,7 +130,7 @@ impl Parser {
             Token::Minus => Some(BinaryOp::Subtract),
             Token::Multiply => Some(BinaryOp::Multiply),
             Token::Divide => Some(BinaryOp::Divide),
-            Token::Modulus => Some(BinaryOp::Modulus),
+            Token::_Modulus => Some(BinaryOp::Modulus),
             Token::Equals => Some(BinaryOp::Equals),
             Token::NotEquals => Some(BinaryOp::NotEquals),
             Token::LessThan => Some(BinaryOp::LessThan),
@@ -148,6 +148,7 @@ impl Parser {
         match self.current_token() {
             Token::Keyword(kw) => match kw.as_str() {
                 "DECLARE" => self.parse_declare(),
+                "DEFINE" => self.parse_define(),
                 "TYPE" => self.parse_type_declaration(),
                 "IF" => self.parse_if(),
                 "WHILE" => self.parse_while(),
@@ -271,6 +272,86 @@ impl Parser {
         })
     }
     
+    fn parse_define(&mut self) -> Result<Stmt, String> {
+        self.expect(Token::Keyword("DEFINE".to_string()))?;
+        
+        let name = match self.current_token() {
+            Token::Identifier(n) => {
+                let name = n.clone();
+                self.advance();
+                name
+            }
+            _ => return Err(self.error_with_pos("Expected identifier after DEFINE")),
+        };
+        
+        self.expect(Token::LeftParen)?;
+        
+        let mut values = Vec::new();
+        loop {
+            // Accept any value type: numbers, strings, chars, identifiers, keywords, booleans
+            let value_str = match self.current_token() {
+                Token::Number(n) => {
+                    let val = n.clone();
+                    self.advance();
+                    val
+                }
+                Token::String(s) => {
+                    let val = s.clone();
+                    self.advance();
+                    val
+                }
+                Token::Char(c) => {
+                    let val = c.clone();
+                    self.advance();
+                    val
+                }
+                Token::Identifier(v) => {
+                    let val = v.clone();
+                    self.advance();
+                    val
+                }
+                Token::Keyword(v) => {
+                    // Handle TRUE/FALSE or other keywords
+                    let val = v.clone();
+                    self.advance();
+                    val
+                }
+                _ => return Err(self.error_with_pos("Expected value (number, string, char, identifier, or keyword)")),
+            };
+            
+            values.push(value_str);
+            
+            match self.current_token() {
+                Token::Comma => {
+                    self.advance();
+                    continue;
+                }
+                Token::RightParen => {
+                    self.advance();
+                    break;
+                }
+                _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
+            }
+        }
+        
+        self.expect(Token::Colon)?;
+        
+        let type_name = match self.current_token() {
+            Token::Identifier(n) => {
+                let name = n.clone();
+                self.advance();
+                name
+            }
+            _ => return Err(self.error_with_pos("Expected type name")),
+        };
+        
+        Ok(Stmt::Define {
+            name,
+            values,
+            type_name,
+        })
+    }
+
     fn parse_call(&mut self) -> Result<Stmt, String> {
         self.expect(Token::Keyword("CALL".to_string()))?;
         
@@ -429,61 +510,6 @@ impl Parser {
                 return_type,
                 body,
             },
-        })
-    }
-    
-    fn parse_define(&mut self) -> Result<Stmt, String> {
-        self.expect(Token::Keyword("DEFINE".to_string()))?;
-        
-        let name = match self.current_token() {
-            Token::Identifier(n) => {
-                let name = n.clone();
-                self.advance();
-                name
-            }
-            _ => return Err(self.error_with_pos("Expected identifier after DEFINE")),
-        };
-        
-        self.expect(Token::LeftParen)?;
-        
-        let mut values = Vec::new();
-        loop {
-            match self.current_token() {
-                Token::Identifier(v) | Token::Keyword(v) => {
-                    values.push(v.clone());
-                    self.advance();
-                }
-                _ => return Err(self.error_with_pos("Expected enum value")),
-            }
-            
-            match self.current_token() {
-                Token::Comma => {
-                    self.advance();
-                    continue;
-                }
-                Token::RightParen => {
-                    self.advance();
-                    break;
-                }
-                _ => return Err(self.error_with_pos("Expected comma or closing parenthesis")),
-            }
-        }
-        
-        self.expect(Token::Colon)?;
-        
-        let type_name = match self.current_token() {
-            Token::Identifier(n) => {
-                let name = n.clone();
-                self.advance();
-                name
-            }
-            _ => return Err(self.error_with_pos("Expected type name")),
-        };
-        
-        Ok(Stmt::Define {
-            name,
-            values,
-            type_name,
         })
     }
 

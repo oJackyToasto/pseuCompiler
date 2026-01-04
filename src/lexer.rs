@@ -12,7 +12,7 @@ pub enum Token {
     Minus,
     Multiply,
     Divide,
-    Modulus,
+    _Modulus,
     Equals,
     NotEquals,
     LessThan,
@@ -41,7 +41,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn is_right_paren(&self) -> bool {
+    pub fn _is_right_paren(&self) -> bool {
         matches!(self, Token::RightParen)
     }
 }
@@ -70,7 +70,7 @@ impl Lexer {
         }
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn _tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         loop {
             let token = self.next_token();
@@ -200,7 +200,7 @@ impl Lexer {
             "NOT" => Token::Not,
             "DECLARE" | "FUNCTION" | "RETURNS" | "FOR" | "WHILE" | "IF" | "TYPE" | "PROCEDURE"
             | "ELSE" | "DO" | "END" | "ENDFUNCTION" | "NEXT" | "ENDIF" | "ENDTYPE" | "ENDPROCEDURE"
-            | "ENDWHILE" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT"
+            | "ENDWHILE" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT" | "DEFINE"
             | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD" | "TRUE" | "FALSE"
             | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND" | "RAND"
             | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE"
