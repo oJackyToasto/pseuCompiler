@@ -1,6 +1,5 @@
 use crate::ast::{Stmt, Type, Span};
 
-/// Extracted symbol information
 #[derive(Debug, Clone)]
 pub struct VariableSymbol {
     pub name: String,
@@ -50,7 +49,6 @@ pub struct SymbolTable {
     pub types: Vec<TypeSymbol>,
 }
 
-/// Context information for completion
 #[derive(Debug, Clone)]
 pub struct CompletionContext {
     pub after_declare: bool,
@@ -64,7 +62,6 @@ pub struct CompletionContext {
     pub prefix: String,
 }
 
-/// Completion item kind
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CompletionItemKind {
     Keyword,
@@ -74,7 +71,6 @@ pub enum CompletionItemKind {
     Type,
 }
 
-/// Completion suggestion
 #[derive(Debug, Clone)]
 pub struct CompletionItem {
     pub label: String,
@@ -84,11 +80,9 @@ pub struct CompletionItem {
     pub insert_text: String,
 }
 
-/// Extracts symbols from AST
 pub struct SymbolExtractor;
 
 impl SymbolExtractor {
-    /// Extract all symbols from a list of statements
     pub fn extract_symbols(statements: &[Stmt]) -> SymbolTable {
         let mut table = SymbolTable {
             variables: Vec::new(),
@@ -135,7 +129,6 @@ impl SymbolExtractor {
                     span: span.clone(),
                 });
 
-                // Also extract symbols from function body
                 for body_stmt in &function.body {
                     Self::extract_from_stmt(body_stmt, table);
                 }
@@ -154,7 +147,6 @@ impl SymbolExtractor {
                     span: span.clone(),
                 });
 
-                // Also extract symbols from procedure body
                 for body_stmt in &procedure.body {
                     Self::extract_from_stmt(body_stmt, table);
                 }
@@ -166,17 +158,14 @@ impl SymbolExtractor {
                 });
             }
             _ => {
-                // Other statements don't define symbols at top level
             }
         }
     }
 }
 
-/// Analyzes code context at a given position
 pub struct ContextAnalyzer;
 
 impl ContextAnalyzer {
-    /// Analyze context at the given position
     pub fn analyze_context(code: &str, line: usize, column: usize) -> CompletionContext {
         let lines: Vec<&str> = code.split('\n').collect();
         let current_line = if line > 0 && line <= lines.len() {
@@ -205,10 +194,8 @@ impl ContextAnalyzer {
         
         let full_context = format!("{}\n{}", previous_lines, before_cursor);
 
-        // Extract prefix (word being typed)
         let prefix = Self::extract_prefix(before_cursor);
 
-        // Detect context patterns using lexer for accuracy
         let after_declare = Self::matches_pattern(before_cursor, r"DECLARE\s+[\w,]*\s*:\s*$");
         let after_function = Self::matches_pattern(before_cursor, r"FUNCTION\s+\w+\s*\([^)]*\)\s*RETURNS\s*$");
         let in_array_decl = Self::matches_pattern(&full_context, r"ARRAY\s*\[")
@@ -234,7 +221,6 @@ impl ContextAnalyzer {
     }
 
     fn extract_prefix(text: &str) -> String {
-        // Extract the last word/identifier
         text.trim()
             .split(|c: char| !c.is_alphanumeric() && c != '_')
             .last()
@@ -243,9 +229,6 @@ impl ContextAnalyzer {
     }
 
     fn matches_pattern(text: &str, pattern: &str) -> bool {
-        // Simple pattern matching - for now use string matching
-        // In a full implementation, we'd use regex or proper lexer
-        // For regex patterns, we'll do simple checks
         if pattern == r"DECLARE\s+[\w,]*\s*:\s*$" {
             return text.trim_end().ends_with(':') && text.contains("DECLARE");
         }
@@ -275,7 +258,6 @@ impl ContextAnalyzer {
     }
 }
 
-/// Keywords in the language
 pub const KEYWORDS: &[&str] = &[
     "DECLARE", "CONSTANT", "FUNCTION", "PROCEDURE", "ENDFUNCTION", "ENDPROCEDURE",
     "IF", "THEN", "ELSE", "ENDIF", "WHILE", "DO", "ENDWHILE",
@@ -289,12 +271,10 @@ pub const KEYWORDS: &[&str] = &[
     "RETURNS"
 ];
 
-/// Built-in types
 pub const TYPES: &[&str] = &[
     "INTEGER", "REAL", "STRING", "CHAR", "BOOLEAN", "ARRAY"
 ];
 
-/// Built-in function information
 #[derive(Debug, Clone)]
 pub struct BuiltinFunction {
     pub name: &'static str,
@@ -316,11 +296,9 @@ pub const BUILTIN_FUNCTIONS: &[BuiltinFunction] = &[
     BuiltinFunction { name: "MOD", description: "Returns the remainder of division", params: &["dividend", "divisor"] },
 ];
 
-/// Provides completion suggestions
 pub struct CompletionProvider;
 
 impl CompletionProvider {
-    /// Get completion suggestions based on context and symbols
     pub fn get_completions(
         code: &str,
         line: usize,
@@ -340,7 +318,6 @@ impl CompletionProvider {
             }
         };
 
-        // After DECLARE, suggest types
         if context.after_declare {
             for &type_name in TYPES {
                 if matches_prefix(type_name) {
@@ -363,7 +340,6 @@ impl CompletionProvider {
                 });
             }
         }
-        // After FUNCTION/PROCEDURE name, suggest return types
         else if context.after_function {
             for &type_name in TYPES {
                 if matches_prefix(type_name) {
@@ -519,7 +495,6 @@ impl CompletionProvider {
     }
 
     fn is_after_delimiter(prefix: &str, _code: &str, _line: usize, _column: usize) -> bool {
-        // Simple check - if prefix is empty, we're after a delimiter
         prefix.is_empty()
     }
 
@@ -577,11 +552,8 @@ impl CompletionProvider {
     }
 }
 
-/// Provides hover information
 pub struct HoverProvider;
-
 impl HoverProvider {
-    /// Get hover information at the given position
     pub fn get_hover_info(
         code: &str,
         line: usize,
@@ -590,7 +562,6 @@ impl HoverProvider {
     ) -> Option<String> {
         let symbols = SymbolExtractor::extract_symbols(statements);
         
-        // Extract word at cursor
         let lines: Vec<&str> = code.split('\n').collect();
         let current_line = if line > 0 && line <= lines.len() {
             lines[line - 1]
@@ -604,18 +575,15 @@ impl HoverProvider {
             current_line
         };
 
-        // Extract the word
         let word = ContextAnalyzer::extract_prefix(before_cursor);
         if word.is_empty() {
             return None;
         }
 
-        // Check if it's a keyword
         if KEYWORDS.contains(&word.as_str()) {
             return Some(format!("**{}**\n\n{}", word, CompletionProvider::get_keyword_documentation(&word)));
         }
 
-        // Check if it's a built-in function
         if let Some(func) = BUILTIN_FUNCTIONS.iter().find(|f| f.name.eq_ignore_ascii_case(&word)) {
             let params = if func.params.is_empty() {
                 "no parameters".to_string()
@@ -625,7 +593,6 @@ impl HoverProvider {
             return Some(format!("**{}({})**\n\n{}", func.name, params, func.description));
         }
 
-        // Check if it's a variable
         if let Some(variable) = symbols.variables.iter().find(|v| v.name == word) {
             let type_info = if let Some(ref type_name) = variable.type_name {
                 format!(": {:?}", type_name)
@@ -635,22 +602,18 @@ impl HoverProvider {
             return Some(format!("**Variable:** `{}{}`", variable.name, type_info));
         }
 
-        // Check if it's a constant
         if let Some(constant) = symbols.constants.iter().find(|c| c.name == word) {
             return Some(format!("**Constant:** `{}`", constant.name));
         }
 
-        // Check if it's a function
         if let Some(func) = symbols.functions.iter().find(|f| f.name == word) {
             return Some(format!("**Function:** {}", CompletionProvider::format_function_documentation(func)));
         }
 
-        // Check if it's a procedure
         if let Some(proc) = symbols.procedures.iter().find(|p| p.name == word) {
             return Some(format!("**Procedure:** {}", CompletionProvider::format_procedure_documentation(proc)));
         }
 
-        // Check if it's a type
         if let Some(type_sym) = symbols.types.iter().find(|t| t.name == word) {
             return Some(format!("**Type:** `{}`", type_sym.name));
         }
