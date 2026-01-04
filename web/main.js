@@ -245,8 +245,13 @@ function initMonaco() {
             console.error('Editor element not found!');
             return;
         }
+        
+        // Load cached content or use example
+        const cachedContent = localStorage.getItem('editorContent');
+        const initialContent = cachedContent || examples.simple;
+        
         editor = monaco.editor.create(editorElement, {
-            value: examples.simple,
+            value: initialContent,
             language: 'pseudocode',
             theme: 'pseudocode-dark',
             automaticLayout: true,
@@ -272,6 +277,19 @@ function initMonaco() {
             },
             quickSuggestionsDelay: 10  // Lower delay for faster autocomplete
         });
+        
+        // Save editor content to cache on change (debounced)
+        let saveTimeout = null;
+        editor.onDidChangeModelContent(() => {
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+            }
+            saveTimeout = setTimeout(() => {
+                const content = editor.getValue();
+                localStorage.setItem('editorContent', content);
+            }, 500); // Save 500ms after user stops typing
+        });
+        
         console.log('Monaco Editor initialized successfully');
     });
 }
@@ -295,6 +313,7 @@ function initTerminal() {
         cursorBlink: true,
         fontSize: 14,
         fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+        scrollback: 10000, // Allow large scrollback buffer
         theme: {
             background: '#1e1e1e',
             foreground: '#d4d4d4',
@@ -336,6 +355,8 @@ function initTerminal() {
             try {
                 fitAddon = new FitAddonClass();
                 terminal.loadAddon(fitAddon);
+                // Store reference for later use
+                terminal._fitAddon = fitAddon;
             } catch (e) {
                 console.warn('Failed to initialize FitAddon, terminal will work without auto-resize:', e);
                 fitAddon = null;
@@ -347,13 +368,9 @@ function initTerminal() {
     
     terminal.open(terminalElement);
     
-    // Handle window resize - use FitAddon if available, otherwise do nothing
-    // (xterm.js handles basic resizing automatically)
+    // Initial fit
     if (fitAddon) {
         fitAddon.fit();
-        window.addEventListener('resize', () => {
-            fitAddon.fit();
-        });
     }
 
     terminal.writeln('Pseudocode Terminal Ready');
@@ -730,11 +747,27 @@ async function checkSyntax() {
 // Clear editor
 function clearEditor() {
     if (editor) {
-        editor.setValue('');
+        // Use executeEdits to preserve undo history (Ctrl+Z will restore content)
+        const model = editor.getModel();
+        if (model) {
+            const fullRange = model.getFullModelRange();
+            const currentContent = model.getValue();
+            
+            // Only clear if there's content to clear
+            if (currentContent.length > 0) {
+                editor.executeEdits('clear', [{
+                    range: fullRange,
+                    text: ''
+                }]);
+            }
+        }
         clearErrorDecorations();
     }
     // Reset filename to untitled
     updateFilename('untitled');
+    // Clear cached content and filename
+    localStorage.removeItem('editorContent');
+    localStorage.removeItem('editorFilename');
     if (terminal) {
         terminal.clear();
         terminal.writeln('Pseudocode Terminal Ready');
@@ -759,6 +792,8 @@ function loadExample() {
     if (exampleName && examples[exampleName] && editor) {
         editor.setValue(examples[exampleName]);
         clearErrorDecorations();
+        // Save to cache
+        localStorage.setItem('editorContent', examples[exampleName]);
     }
 }
 
@@ -771,6 +806,8 @@ function updateFilename(filename) {
             ? filename.slice(0, -5) 
             : filename;
         filenameInput.value = nameWithoutExt;
+        // Save to cache
+        localStorage.setItem('editorFilename', nameWithoutExt);
     }
 }
 
@@ -802,6 +839,8 @@ function handleFileSelect(event) {
                 clearErrorDecorations();
                 // Update filename display
                 updateFilename(file.name);
+                // Save to cache
+                localStorage.setItem('editorContent', content);
                 if (terminal) {
                     terminal.writeln(`\x1b[32mOpened file: ${file.name}\x1b[0m`);
                 }
@@ -988,6 +1027,154 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Resize terminal to fit its container
+function resizeTerminal() {
+    if (!terminal) return;
+    
+    // Try to use FitAddon if available
+    if (typeof window.FitAddon !== 'undefined') {
+        let FitAddonClass = window.FitAddon;
+        
+        // Try FitAddon.FitAddon pattern (common with script tag loading)
+        if (typeof FitAddonClass === 'object' && typeof FitAddonClass.FitAddon === 'function') {
+            FitAddonClass = FitAddonClass.FitAddon;
+        }
+        
+        // Check if terminal already has FitAddon loaded
+        if (!terminal._fitAddon && typeof FitAddonClass === 'function') {
+            try {
+                terminal._fitAddon = new FitAddonClass();
+                terminal.loadAddon(terminal._fitAddon);
+            } catch (e) {
+                console.warn('Failed to initialize FitAddon:', e);
+            }
+        }
+        
+        if (terminal._fitAddon && typeof terminal._fitAddon.fit === 'function') {
+            // Use requestAnimationFrame to ensure DOM has updated before fitting
+            requestAnimationFrame(() => {
+                if (terminal && terminal._fitAddon) {
+                    // Store current scroll position
+                    const scrollPosition = terminal.buffer.active.baseY;
+                    
+                    // Fit the terminal to the container
+                    terminal._fitAddon.fit();
+                    
+                    // After fitting, ensure scrollback is maintained and scrollbar appears if needed
+                    // Force terminal to recalculate its scrollable area
+                    setTimeout(() => {
+                        if (terminal) {
+                            // Refresh the terminal to ensure proper rendering
+                            terminal.refresh(0, terminal.rows - 1);
+                            
+                            // Ensure the viewport can scroll if content exceeds visible area
+                            // The terminal should maintain its scrollback buffer
+                            const viewport = terminal.element?.querySelector('.xterm-viewport');
+                            if (viewport) {
+                                // Force recalculation of scrollable height
+                                viewport.style.overflowY = 'auto';
+                            }
+                        }
+                    }, 50);
+                }
+            });
+            return;
+        }
+    }
+    
+    // Fallback: manually trigger terminal resize if FitAddon not available
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+        if (terminal && terminal.resize) {
+            // Get the actual dimensions of the terminal element
+            const terminalElement = terminal.element;
+            if (terminalElement) {
+                const cols = terminal.cols || 80;
+                const lineHeight = parseFloat(getComputedStyle(terminalElement).lineHeight) || 14;
+                const padding = parseFloat(getComputedStyle(terminalElement).paddingTop) + 
+                               parseFloat(getComputedStyle(terminalElement).paddingBottom) || 0;
+                const rows = Math.floor((terminalElement.clientHeight - padding) / lineHeight);
+                if (rows > 0 && cols > 0) {
+                    terminal.resize(cols, rows);
+                }
+            }
+        }
+    });
+}
+
+// Initialize resizer for terminal height
+function initResizer() {
+    const resizer = document.getElementById('resizer');
+    const outputContainer = document.querySelector('.output-container');
+    const container = document.querySelector('.container');
+    
+    if (!resizer || !outputContainer || !container) {
+        return;
+    }
+    
+    // Load saved height from localStorage
+    const savedHeight = localStorage.getItem('terminalHeight');
+    if (savedHeight) {
+        const height = parseInt(savedHeight, 10);
+        const headerHeight = document.querySelector('header')?.getBoundingClientRect().height || 0;
+        const maxAllowedHeight = window.innerHeight - headerHeight - 100;
+        if (height >= 200 && height <= maxAllowedHeight) {
+            outputContainer.style.height = `${height}px`;
+            // Resize terminal after setting height
+            setTimeout(() => resizeTerminal(), 100);
+        }
+    }
+    
+    let isResizing = false;
+    
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const containerRect = container.getBoundingClientRect();
+        const headerHeight = document.querySelector('header').getBoundingClientRect().height;
+        const availableHeight = window.innerHeight - headerHeight;
+        
+        // Calculate new height from bottom of viewport (not container)
+        const newHeight = window.innerHeight - e.clientY;
+        
+        // Constrain between min (200px) and max (availableHeight - 50px for editor)
+        const minHeight = 200;
+        const maxHeight = availableHeight - 50;
+        
+        if (newHeight >= minHeight && newHeight <= maxHeight) {
+            outputContainer.style.height = `${newHeight}px`;
+            // Resize terminal immediately during drag
+            resizeTerminal();
+            // Save to localStorage
+            localStorage.setItem('terminalHeight', newHeight.toString());
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove('resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            // Final resize after drag ends
+            resizeTerminal();
+        }
+    });
+    
+    // Also resize terminal on window resize
+    window.addEventListener('resize', () => {
+        resizeTerminal();
+    });
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
     initTerminal();
@@ -998,6 +1185,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
         fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    // Load cached filename if available
+    const cachedFilename = localStorage.getItem('editorFilename');
+    if (cachedFilename) {
+        updateFilename(cachedFilename);
+    }
+    
+    // Initialize resizer
+    initResizer();
+    
+    // Save filename when it changes
+    const filenameInput = document.getElementById('filenameInput');
+    if (filenameInput) {
+        filenameInput.addEventListener('change', () => {
+            localStorage.setItem('editorFilename', filenameInput.value);
+        });
+        filenameInput.addEventListener('input', () => {
+            localStorage.setItem('editorFilename', filenameInput.value);
+        });
     }
     
     document.getElementById('openBtn').addEventListener('click', openFile);
