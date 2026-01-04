@@ -415,7 +415,10 @@ function promptInput(promptText) {
             return;
         }
         
-        terminal.write(`\r\n\x1b[33m${promptText}\x1b[0m `);
+        // Only write prompt if provided (empty string = no prompt)
+        if (promptText) {
+            terminal.write(`\r\n\x1b[33m${promptText}\x1b[0m `);
+        }
         
         let inputBuffer = '';
         let isPrompting = true;
@@ -469,7 +472,7 @@ function promptInput(promptText) {
     });
 }
 
-// Run code with interactive terminal input
+// Run code with interactive terminal input (line-by-line execution)
 async function runCode() {
     if (isExecuting) {
         if (terminal) {
@@ -498,68 +501,59 @@ async function runCode() {
     
     if (terminal) {
         terminal.clear();
-        terminal.writeln('Executing program...\r\n');
     }
     
     try {
-        // Get all INPUT statements from the code
-        const inputVars = engine.get_input_statements(code);
-        const inputVarsArray = Array.isArray(inputVars) ? inputVars : [];
-        
-        if (inputVarsArray.length > 0) {
-            // Clear input queue
-            engine.clear_inputs();
-            
-            // Collect inputs interactively in terminal
-            const inputs = [];
-            for (const varName of inputVarsArray) {
-                const inputValue = await promptInput(`Enter value for ${varName}:`);
-                inputs.push(inputValue);
+        // Parse the code for step-by-step execution
+        const parseResult = engine.parse_for_execution(code);
+        if (!parseResult || !parseResult.valid) {
+            const errors = parseResult?.errors || [];
+            if (terminal && errors.length > 0) {
+                terminal.writeln('\x1b[31mParse errors:\x1b[0m');
+                errors.forEach(error => {
+                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
+                });
             }
-            
-            // Add all inputs to the queue (in reverse order since queue uses LIFO)
-            for (let i = inputs.length - 1; i >= 0; i--) {
-                engine.add_input(inputs[i]);
-            }
+            highlightErrors(errors);
+            return;
         }
         
-        // Execute the code
-        executeCodeWithInputs(code);
-    } catch (error) {
-        if (terminal) {
-            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
-        }
-        console.error('Execution error:', error);
-    } finally {
-        isExecuting = false;
-    }
-}
-
-// Execute code with inputs already in queue
-function executeCodeWithInputs(code) {
-    try {
-        const result = engine.execute(code);
-        const executionResult = result;
-        
-        let outputText = executionResult.output || '';
-        
-        if (executionResult.errors && executionResult.errors.length > 0) {
-            terminal.writeln('\r\n\x1b[31m--- Errors ---\x1b[0m');
-            executionResult.errors.forEach(error => {
-                terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
-            });
-            highlightErrors(executionResult.errors);
-        } else if (outputText) {
-            // Output is already in the buffer from the interpreter
-            // Just write it to terminal
-            const lines = outputText.split('\n');
-            lines.forEach(line => {
-                if (line.trim() || lines.indexOf(line) < lines.length - 1) {
-                    terminal.writeln(line);
+        // Execute statements one by one
+        while (engine.has_more_statements()) {
+            // Check if next statement is INPUT
+            const stmtInfo = engine.get_next_statement_info();
+            
+            if (stmtInfo.is_input && stmtInfo.input_var_name) {
+                // Pause and get input (no prompt text - true terminal style)
+                const inputValue = await promptInput('');
+                engine.clear_inputs();
+                engine.add_input(inputValue);
+            }
+            
+            // Execute the next statement
+            const result = engine.execute_next_statement();
+            
+            // Display any output immediately
+            if (result.output) {
+                // Split by newlines and write each line properly
+                const lines = result.output.split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    if (i < lines.length - 1 || lines[i].length > 0) {
+                        // Use writeln for lines (handles newlines properly)
+                        terminal.writeln(lines[i]);
+                    }
                 }
-            });
-        } else {
-            terminal.writeln('\x1b[33m(No output)\x1b[0m');
+            }
+            
+            // Check for errors
+            if (result.errors && result.errors.length > 0) {
+                terminal.writeln('\r\n\x1b[31m--- Errors ---\x1b[0m');
+                result.errors.forEach(error => {
+                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
+                });
+                highlightErrors(result.errors);
+                break; // Stop execution on error
+            }
         }
         
         terminal.writeln('\r\n\x1b[32mProgram execution complete.\x1b[0m\r\n');
@@ -568,6 +562,8 @@ function executeCodeWithInputs(code) {
             terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
         }
         console.error('Execution error:', error);
+    } finally {
+        isExecuting = false;
     }
 }
 
