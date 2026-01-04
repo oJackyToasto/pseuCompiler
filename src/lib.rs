@@ -54,9 +54,20 @@ pub struct HoverInfo {
     pub contents: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct StatementInfo {
+    pub is_input: bool,
+    pub input_var_name: Option<String>,
+    pub line: usize,
+}
+
 #[wasm_bindgen]
 pub struct PseudocodeEngine {
     interpreter: WasmInterpreter,
+    #[wasm_bindgen(skip)]
+    parsed_statements: Vec<crate::ast::Stmt>,
+    #[wasm_bindgen(skip)]
+    current_statement_index: usize,
 }
 
 #[wasm_bindgen]
@@ -65,7 +76,116 @@ impl PseudocodeEngine {
     pub fn new() -> PseudocodeEngine {
         PseudocodeEngine {
             interpreter: WasmInterpreter::new(),
+            parsed_statements: Vec::new(),
+            current_statement_index: 0,
         }
+    }
+
+    /// Parse code and prepare for step-by-step execution
+    #[wasm_bindgen]
+    pub fn parse_for_execution(&mut self, code: &str) -> JsValue {
+        // Clear previous state
+        self.interpreter.clear_output();
+        self.parsed_statements.clear();
+        self.current_statement_index = 0;
+        
+        // Parse the code
+        let mut parser = Parser::new(code);
+        match parser.parse_program() {
+            Ok(stmts) => {
+                self.parsed_statements = stmts;
+                serde_wasm_bindgen::to_value(&SyntaxCheckResult {
+                    valid: true,
+                    errors: Vec::new(),
+                }).unwrap()
+            }
+            Err(e) => {
+                let error_info = ErrorInfo {
+                    message: e,
+                    line: 1,
+                    column: 1,
+                };
+                serde_wasm_bindgen::to_value(&SyntaxCheckResult {
+                    valid: false,
+                    errors: vec![error_info],
+                }).unwrap()
+            }
+        }
+    }
+
+    /// Get information about the next statement to execute
+    #[wasm_bindgen]
+    pub fn get_next_statement_info(&self) -> JsValue {
+        if self.current_statement_index >= self.parsed_statements.len() {
+            return serde_wasm_bindgen::to_value(&StatementInfo {
+                is_input: false,
+                input_var_name: None,
+                line: 0,
+            }).unwrap();
+        }
+        
+        let stmt = &self.parsed_statements[self.current_statement_index];
+        let (is_input, input_var_name) = match stmt {
+            crate::ast::Stmt::Input { name, .. } => (true, Some(name.clone())),
+            _ => (false, None),
+        };
+        
+        let line = get_stmt_span(stmt).map(|s| s.line).unwrap_or(0);
+        
+        serde_wasm_bindgen::to_value(&StatementInfo {
+            is_input,
+            input_var_name,
+            line,
+        }).unwrap()
+    }
+
+    /// Execute the next statement and return output since last call
+    #[wasm_bindgen]
+    pub fn execute_next_statement(&mut self) -> JsValue {
+        if self.current_statement_index >= self.parsed_statements.len() {
+            return serde_wasm_bindgen::to_value(&ExecutionResult {
+                output: String::new(),
+                errors: Vec::new(),
+            }).unwrap();
+        }
+        
+        // Get output before execution
+        let output_before = self.interpreter.get_output().to_string();
+        
+        // Execute the statement
+        let stmt = &self.parsed_statements[self.current_statement_index];
+        let mut errors = Vec::new();
+        let output_after = if let Err(e) = self.interpreter.evaluate_stmt(stmt) {
+            let line = get_stmt_span(stmt).map(|s| s.line).unwrap_or(1);
+            errors.push(ErrorInfo {
+                message: e,
+                line,
+                column: 1,
+            });
+            self.interpreter.get_output().to_string()
+        } else {
+            self.interpreter.get_output().to_string()
+        };
+        
+        // Calculate new output (difference)
+        let new_output = if output_after.len() > output_before.len() {
+            output_after[output_before.len()..].to_string()
+        } else {
+            String::new()
+        };
+        
+        self.current_statement_index += 1;
+        
+        serde_wasm_bindgen::to_value(&ExecutionResult {
+            output: new_output,
+            errors,
+        }).unwrap()
+    }
+
+    /// Check if there are more statements to execute
+    #[wasm_bindgen]
+    pub fn has_more_statements(&self) -> bool {
+        self.current_statement_index < self.parsed_statements.len()
     }
 
     /// Execute pseudocode and return results

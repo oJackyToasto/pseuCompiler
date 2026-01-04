@@ -524,9 +524,8 @@ impl WasmInterpreter {
 
                 let input = input.trim();
                 
-                // Echo the input value to the output buffer
-                self.output_buffer.push_str(input);
-                self.output_buffer.push('\n');
+                // Don't echo input - terminal handles echo in interactive mode
+                // (This allows for true terminal-like experience)
 
                 let value = match var_type {
                     Type::INTEGER => {
