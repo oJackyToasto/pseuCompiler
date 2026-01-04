@@ -66,7 +66,7 @@ function initMonaco() {
         
         // Register completion item provider for autocomplete
         monaco.languages.registerCompletionItemProvider('pseudocode', {
-            provideCompletionItems: (model, position) => {
+            provideCompletionItems: (model, position, context) => {
                 if (!languageService) {
                     return { suggestions: [] };
                 }
@@ -81,12 +81,25 @@ function initMonaco() {
 
                 const code = model.getValue();
                 const prefix = word.word;
+                
+                // Only show suggestions if there's at least one character typed
+                // or if triggered by a trigger character
+                if (!context.triggerKind && prefix.length === 0) {
+                    return { suggestions: [] };
+                }
+                
                 const suggestions = languageService.getSuggestions(
                     code,
                     position.lineNumber,
                     position.column,
                     prefix
                 );
+
+                // Debug logging
+                if (suggestions.length > 0) {
+                    console.log(`Autocomplete: Found ${suggestions.length} suggestions for prefix "${prefix}"`);
+                    console.log('Sample suggestions:', suggestions.slice(0, 5).map(s => s.label));
+                }
 
                 // Convert to Monaco completion items
                 const items = suggestions.map(suggestion => ({
@@ -248,7 +261,17 @@ function initMonaco() {
             fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
             minimap: { enabled: true },
             scrollBeyondLastLine: false,
-            wordWrap: 'on'
+            wordWrap: 'on',
+            quickSuggestions: {
+                other: true,
+                comments: false,
+                strings: false
+            },
+            suggestOnTriggerCharacters: true,
+            acceptSuggestionOnCommitCharacter: true,
+            tabCompletion: 'on',
+            wordBasedSuggestions: false,  // Disable built-in word-based suggestions
+            wordBasedSuggestionsOnlySameLanguage: false  // Don't use words from other files
         });
         console.log('Monaco Editor initialized successfully');
     });

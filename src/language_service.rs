@@ -318,6 +318,32 @@ impl CompletionProvider {
             }
         };
 
+        // Always include keywords and built-in functions (available everywhere)
+        for &keyword in KEYWORDS {
+            if matches_prefix(keyword) {
+                suggestions.push(CompletionItem {
+                    label: keyword.to_string(),
+                    kind: CompletionItemKind::Keyword,
+                    detail: Some("Keyword".to_string()),
+                    documentation: Some(Self::get_keyword_documentation(keyword)),
+                    insert_text: keyword.to_string(),
+                });
+            }
+        }
+
+        // Always include built-in functions
+        for func in BUILTIN_FUNCTIONS {
+            if matches_prefix(func.name) {
+                suggestions.push(CompletionItem {
+                    label: func.name.to_string(),
+                    kind: CompletionItemKind::Function,
+                    detail: Some("Built-in Function".to_string()),
+                    documentation: Some(func.description.to_string()),
+                    insert_text: format!("{}(", func.name),
+                });
+            }
+        }
+
         if context.after_declare {
             for &type_name in TYPES {
                 if matches_prefix(type_name) {
@@ -353,21 +379,9 @@ impl CompletionProvider {
                 }
             }
         }
-        // Start of line or after keyword - suggest keywords
+        // Start of line or after keyword - suggest functions and procedures
+        // (keywords and built-ins already added above)
         else if context.is_start_of_line || Self::is_after_delimiter(&context.prefix, code, line, column) {
-            // Suggest keywords
-            for &keyword in KEYWORDS {
-                if matches_prefix(keyword) {
-                    suggestions.push(CompletionItem {
-                        label: keyword.to_string(),
-                        kind: CompletionItemKind::Keyword,
-                        detail: Some("Keyword".to_string()),
-                        documentation: Some(Self::get_keyword_documentation(keyword)),
-                        insert_text: keyword.to_string(),
-                    });
-                }
-            }
-
             // Suggest functions and procedures
             for func in &symbols.functions {
                 if matches_prefix(&func.name) {
@@ -398,8 +412,21 @@ impl CompletionProvider {
                 }
             }
         }
-        // In assignment or expression - suggest variables, functions, built-ins
+        // In assignment or expression - suggest variables, functions, built-ins, and keywords
         else {
+            // Suggest keywords (always available)
+            for &keyword in KEYWORDS {
+                if matches_prefix(keyword) {
+                    suggestions.push(CompletionItem {
+                        label: keyword.to_string(),
+                        kind: CompletionItemKind::Keyword,
+                        detail: Some("Keyword".to_string()),
+                        documentation: Some(Self::get_keyword_documentation(keyword)),
+                        insert_text: keyword.to_string(),
+                    });
+                }
+            }
+
             // Suggest variables
             for variable in &symbols.variables {
                 if matches_prefix(&variable.name) {
@@ -431,18 +458,6 @@ impl CompletionProvider {
                 }
             }
 
-            // Suggest built-in functions
-            for func in BUILTIN_FUNCTIONS {
-                if matches_prefix(func.name) {
-                    suggestions.push(CompletionItem {
-                        label: func.name.to_string(),
-                        kind: CompletionItemKind::Function,
-                        detail: Some("Built-in Function".to_string()),
-                        documentation: Some(func.description.to_string()),
-                        insert_text: format!("{}(", func.name),
-                    });
-                }
-            }
 
             // Suggest user-defined functions and procedures
             for func in &symbols.functions {
@@ -474,19 +489,6 @@ impl CompletionProvider {
                 }
             }
 
-            // Suggest context keywords
-            let context_keywords = ["IF", "WHILE", "FOR", "RETURN", "OUTPUT", "INPUT"];
-            for &keyword in &context_keywords {
-                if matches_prefix(keyword) {
-                    suggestions.push(CompletionItem {
-                        label: keyword.to_string(),
-                        kind: CompletionItemKind::Keyword,
-                        detail: Some("Keyword".to_string()),
-                        documentation: Some(Self::get_keyword_documentation(keyword)),
-                        insert_text: keyword.to_string(),
-                    });
-                }
-            }
         }
 
         // Sort suggestions
