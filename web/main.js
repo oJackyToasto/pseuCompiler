@@ -68,6 +68,7 @@ function initMonaco() {
         monaco.languages.registerCompletionItemProvider('pseudocode', {
             provideCompletionItems: (model, position, context) => {
                 if (!languageService) {
+                    console.log('Autocomplete: languageService not initialized');
                     return { suggestions: [] };
                 }
 
@@ -82,24 +83,16 @@ function initMonaco() {
                 const code = model.getValue();
                 const prefix = word.word;
                 
-                // Only show suggestions if there's at least one character typed
-                // or if triggered by a trigger character
-                if (!context.triggerKind && prefix.length === 0) {
-                    return { suggestions: [] };
-                }
+                console.log(`Autocomplete triggered: prefix="${prefix}", triggerKind=${context.triggerKind}, column=${position.column}`);
                 
+                // Always try to get suggestions - let the language service decide what to return
+                // (This ensures autocomplete works even on the first character typed)
                 const suggestions = languageService.getSuggestions(
                     code,
                     position.lineNumber,
                     position.column,
                     prefix
                 );
-
-                // Debug logging
-                if (suggestions.length > 0) {
-                    console.log(`Autocomplete: Found ${suggestions.length} suggestions for prefix "${prefix}"`);
-                    console.log('Sample suggestions:', suggestions.slice(0, 5).map(s => s.label));
-                }
 
                 // Convert to Monaco completion items
                 const items = suggestions.map(suggestion => ({
@@ -116,7 +109,18 @@ function initMonaco() {
                         : undefined
                 }));
 
-                return { suggestions: items };
+                // Debug logging
+                if (items.length > 0) {
+                    console.log(`Autocomplete: Returning ${items.length} items for prefix "${prefix}"`);
+                    console.log('First 5 items:', items.slice(0, 5).map(i => i.label));
+                } else {
+                    console.log(`Autocomplete: No items for prefix "${prefix}"`);
+                }
+
+                return { 
+                    suggestions: items,
+                    incomplete: false  // Tell Monaco we've provided all suggestions
+                };
             },
             triggerCharacters: [' ', ':', '(', '<']
         });
@@ -271,7 +275,13 @@ function initMonaco() {
             acceptSuggestionOnCommitCharacter: true,
             tabCompletion: 'on',
             wordBasedSuggestions: false,  // Disable built-in word-based suggestions
-            wordBasedSuggestionsOnlySameLanguage: false  // Don't use words from other files
+            wordBasedSuggestionsOnlySameLanguage: false,  // Don't use words from other files
+            suggest: {
+                showKeywords: true,
+                showSnippets: false,
+                showWords: false  // Explicitly disable word-based suggestions
+            },
+            quickSuggestionsDelay: 10  // Lower delay for faster autocomplete
         });
         console.log('Monaco Editor initialized successfully');
     });
