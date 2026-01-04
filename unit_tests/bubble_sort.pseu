@@ -4,7 +4,7 @@
 DECLARE n <- 10: INTEGER
 CONSTANT n
 
-DECLARE arr : ARRAY[1:10] OF INTEGER
+DECLARE arr : ARRAY[0:10] OF INTEGER
 DECLARE i : INTEGER
 DECLARE j : INTEGER
 DECLARE temp : INTEGER
@@ -12,12 +12,12 @@ DECLARE swapped : BOOLEAN
 
 // Initialize array with unsorted values
 
-FOR i <- 1 TO n
+FOR i <- 0 TO n
     arr[i] <- ROUND(RANDOM() * 100, 0)
 NEXT i
 
 OUTPUT "Original array:"
-FOR i <- 1 TO n
+FOR i <- 0 TO n
     OUTPUT arr[i], " "
 NEXT i
 OUTPUT ""
@@ -37,14 +37,14 @@ FOR i <- 1 TO n - 1
 NEXT i
 
 OUTPUT "Sorted array:"
-FOR i <- 1 TO n
+FOR i <- 0 TO n
     OUTPUT arr[i], " "
 NEXT i
 OUTPUT ""
 
 // Verify sorting
 OUTPUT "Verification:"
-FOR i <- 1 TO n - 1
+FOR i <- 0 TO n - 1
     IF arr[i] > arr[i + 1] THEN
         OUTPUT "ERROR: Array is not sorted!"
     ENDIF

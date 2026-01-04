@@ -89,6 +89,7 @@ pub enum Value {
     Array {
         element_type: Box<Type>,
         dimensions: Vec<usize>,
+        start_indices: Vec<i32>,
         data: Vec<Value>,
     },
 }
@@ -219,6 +220,7 @@ impl WasmInterpreter {
                     }
                     Type::ARRAY { dimensions, element_type } => {
                         let mut dim_size = Vec::new();
+                        let mut start_indices = Vec::new();
                         let mut total_size = 1;
 
                         for (start_expr, end_expr) in dimensions {
@@ -242,14 +244,15 @@ impl WasmInterpreter {
                                 }
                             };
 
-                            if start < 1 || end < start {
-                                let msg = format!("Invalid array dimensions: start index must be >= 1 and end index must be >= start index");
+                            if start < 0 || end < start {
+                                let msg = format!("Invalid array dimensions: start index must be >= 0 and end index must be >= start index");
                                 eprintln!("Error at line {}: {}", span.line, msg);
                                 return Err(msg);
                             }
 
                             let size = (end - start + 1) as usize;
                             dim_size.push(size);
+                            start_indices.push(start);
                             total_size *= size;
                         }
 
@@ -259,6 +262,7 @@ impl WasmInterpreter {
                         self.variables.insert(name.clone(), Value::Array {
                             element_type: element_type.clone(),
                             dimensions: dim_size,
+                            start_indices: start_indices.clone(),
                             data,
                         });
                         self.variables_type.insert(name.clone(), Type::ARRAY { dimensions: dimensions.clone(), element_type: element_type.clone() });
@@ -426,29 +430,10 @@ impl WasmInterpreter {
                     let index_values : Vec<Value> = indices_exprs.iter()
                         .map(|expr| self.evaluate_expr(expr))
                         .collect::<Result<_, _>>()?;
-                
-                    let mut index_pos = Vec::new();
-                    for idx_val in index_values {
-                        match idx_val { 
-                            Value::Integer(i) => {
-                                if i < 1 {
-                                    let msg = format!("Invalid index: {}", i);
-                                    eprintln!("Error at line {}: {}", span.line, msg);
-                                    return Err(msg);
-                                }
-                                index_pos.push((i - 1) as usize);
-                            }
-                            _ => {
-                                let msg = format!("Invalid index type: {:?}", idx_val);
-                                eprintln!("Error at line {}: {}", span.line, msg);
-                                return Err(msg);
-                            }
-                        }
-                    }
                     
                     // Check if it's an array (sets are immutable, so no assignment)
-                    let dimensions = match self.variables.get(name) {
-                        Some(Value::Array { dimensions, .. }) => dimensions.clone(),
+                    let (dimensions, start_indices) = match self.variables.get(name) {
+                        Some(Value::Array { dimensions, start_indices, .. }) => (dimensions.clone(), start_indices.clone()),
                         Some(Value::Set { .. }) => {
                             let msg = format!("Cannot assign to set '{}' - sets are immutable", name);
                             eprintln!("Error at line {}: {}", span.line, msg);
@@ -457,6 +442,32 @@ impl WasmInterpreter {
                         Some(_) => return Err(format!("Variable '{}' is not an array", name)),
                         None => return Err(format!("Array {} not found", name)),
                     };
+                    
+                    if index_values.len() != start_indices.len() {
+                        let msg = format!("Index dimension mismatch: expected {} dimensions, got {}", start_indices.len(), index_values.len());
+                        eprintln!("Error at line {}: {}", span.line, msg);
+                        return Err(msg);
+                    }
+                
+                    let mut index_pos = Vec::new();
+                    for (idx_val, start_idx) in index_values.iter().zip(start_indices.iter()) {
+                        match idx_val { 
+                            Value::Integer(i) => {
+                                if *i < *start_idx {
+                                    let msg = format!("Invalid index: must be >= {}, got {}", start_idx, i);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
+                                    return Err(msg);
+                                }
+                                // Convert user index to 0-based internal index
+                                index_pos.push((i - start_idx) as usize);
+                            }
+                            _ => {
+                                let msg = format!("Invalid index type: {:?}", idx_val);
+                                eprintln!("Error at line {}: {}", span.line, msg);
+                                return Err(msg);
+                            }
+                        }
+                    }
                     
                     // Calculate index (can use immutable borrow now)
                     let flat_idx = self.calculate_array_index(index_pos, &dimensions)?;
@@ -1397,26 +1408,33 @@ impl WasmInterpreter {
                         self.error_with_context(&msg, "array access")
                     })?;
             
-                let mut index_positions = Vec::new();
-                for idx_val in index_vals {
-                    match idx_val {
-                        Value::Integer(i) => {
-                            if i < 1 {
-                                let msg = format!("Index must be >= 1, got {}", i);
-                                return Err(self.error_with_context(&msg, "array index validation"));
-                            }
-                            index_positions.push((i - 1) as usize);  // Convert 1-based to 0-based
-                        }
-                        _ => {
-                            let msg = format!("Index must be integer, got {:?}", idx_val);
+                match array_val {
+                    Value::Array { dimensions, start_indices, data, .. } => {
+                        if index_vals.len() != start_indices.len() {
+                            let msg = format!("Index dimension mismatch: expected {} dimensions, got {}", start_indices.len(), index_vals.len());
                             eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
-                    }
-                }
-            
-                match array_val {
-                    Value::Array { dimensions, data, .. } => {
+                        
+                        let mut index_positions = Vec::new();
+                        for (idx_val, start_idx) in index_vals.iter().zip(start_indices.iter()) {
+                            match idx_val {
+                                Value::Integer(i) => {
+                                    if *i < *start_idx {
+                                        let msg = format!("Index must be >= {}, got {}", start_idx, i);
+                                        return Err(self.error_with_context(&msg, "array index validation"));
+                                    }
+                                    // Convert user index to 0-based internal index
+                                    index_positions.push((i - start_idx) as usize);
+                                }
+                                _ => {
+                                    let msg = format!("Index must be integer, got {:?}", idx_val);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
+                                    return Err(msg);
+                                }
+                            }
+                        }
+                        
                         let flat_index = self.calculate_array_index(index_positions, dimensions)?;
                         if flat_index >= data.len() {
                             let msg = format!("Array index out of bounds: {}", flat_index);
@@ -1426,13 +1444,27 @@ impl WasmInterpreter {
                         Ok(data[flat_index].clone())
                     }
                     Value::Set { elements, .. } => {
-                        // Sets only support single index
-                        if index_positions.len() != 1 {
-                            let msg = format!("Set access requires exactly 1 index, got {}", index_positions.len());
+                        // Sets use 1-based indexing (no start index stored)
+                        if index_vals.len() != 1 {
+                            let msg = format!("Set access requires exactly 1 index, got {}", index_vals.len());
                             eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
-                        let index = index_positions[0];
+                        let index = match &index_vals[0] {
+                            Value::Integer(i) => {
+                                if *i < 1 {
+                                    let msg = format!("Set index must be >= 1, got {}", i);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
+                                    return Err(msg);
+                                }
+                                (i - 1) as usize  // Convert 1-based to 0-based
+                            }
+                            _ => {
+                                let msg = format!("Set index must be integer, got {:?}", index_vals[0]);
+                                eprintln!("Error at line {}: {}", span.line, msg);
+                                return Err(msg);
+                            }
+                        };
                         if index >= elements.len() {
                             let msg = format!("Set index out of bounds: {}", index);
                             eprintln!("Error at line {}: {}", span.line, msg);

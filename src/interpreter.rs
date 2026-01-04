@@ -91,6 +91,7 @@ pub enum Value {
     Array {
         element_type: Box<Type>,
         dimensions: Vec<usize>,
+        start_indices: Vec<i32>,
         data: Vec<Value>,
     },
 }
@@ -223,6 +224,7 @@ impl Interpreter {
                     }
                     Type::ARRAY { dimensions, element_type } => {
                         let mut dim_size = Vec::new();
+                        let mut start_indices = Vec::new();
                         let mut total_size = 1;
 
                         for (start_expr, end_expr) in dimensions {
@@ -246,14 +248,15 @@ impl Interpreter {
                                 }
                             };
 
-                            if start < 1 || end < start {
-                                let msg = format!("Invalid array dimensions: start index must be >= 1 and end index must be >= start index");
+                            if start < 0 || end < start {
+                                let msg = format!("Invalid array dimensions: start index must be >= 0 and end index must be >= start index");
                                 log_error!(msg, span.line);
                                 return Err(msg);
                             }
 
                             let size = (end - start + 1) as usize;
                             dim_size.push(size);
+                            start_indices.push(start);
                             total_size *= size;
                         }
 
@@ -263,6 +266,7 @@ impl Interpreter {
                         self.variables.insert(name.clone(), Value::Array {
                             element_type: element_type.clone(),
                             dimensions: dim_size,
+                            start_indices: start_indices.clone(),
                             data,
                         });
                         self.variables_type.insert(name.clone(), Type::ARRAY { dimensions: dimensions.clone(), element_type: element_type.clone() });
@@ -430,29 +434,10 @@ impl Interpreter {
                     let index_values : Vec<Value> = indices_exprs.iter()
                         .map(|expr| self.evaluate_expr(expr))
                         .collect::<Result<_, _>>()?;
-                
-                    let mut index_pos = Vec::new();
-                    for idx_val in index_values {
-                        match idx_val { 
-                            Value::Integer(i) => {
-                                if i < 1 {
-                                    let msg = format!("Invalid index: {}", i);
-                                    log_error!(msg, span.line);
-                                    return Err(msg);
-                                }
-                                index_pos.push((i - 1) as usize);
-                            }
-                            _ => {
-                                let msg = format!("Invalid index type: {:?}", idx_val);
-                                log_error!(msg, span.line);
-                                return Err(msg);
-                            }
-                        }
-                    }
                     
                     // Check if it's an array (sets are immutable, so no assignment)
-                    let dimensions = match self.variables.get(name) {
-                        Some(Value::Array { dimensions, .. }) => dimensions.clone(),
+                    let (dimensions, start_indices) = match self.variables.get(name) {
+                        Some(Value::Array { dimensions, start_indices, .. }) => (dimensions.clone(), start_indices.clone()),
                         Some(Value::Set { .. }) => {
                             let msg = format!("Cannot assign to set '{}' - sets are immutable", name);
                             log_error!(msg, span.line);
@@ -461,6 +446,32 @@ impl Interpreter {
                         Some(_) => return Err(format!("Variable '{}' is not an array", name)),
                         None => return Err(format!("Array {} not found", name)),
                     };
+                    
+                    if index_values.len() != start_indices.len() {
+                        let msg = format!("Index dimension mismatch: expected {} dimensions, got {}", start_indices.len(), index_values.len());
+                        log_error!(msg, span.line);
+                        return Err(msg);
+                    }
+                
+                    let mut index_pos = Vec::new();
+                    for (idx_val, start_idx) in index_values.iter().zip(start_indices.iter()) {
+                        match idx_val { 
+                            Value::Integer(i) => {
+                                if *i < *start_idx {
+                                    let msg = format!("Invalid index: must be >= {}, got {}", start_idx, i);
+                                    log_error!(msg, span.line);
+                                    return Err(msg);
+                                }
+                                // Convert user index to 0-based internal index
+                                index_pos.push((i - start_idx) as usize);
+                            }
+                            _ => {
+                                let msg = format!("Invalid index type: {:?}", idx_val);
+                                log_error!(msg, span.line);
+                                return Err(msg);
+                            }
+                        }
+                    }
                     
                     // Calculate index (can use immutable borrow now)
                     let flat_idx = self.calculate_array_index(index_pos, &dimensions)?;
@@ -1321,6 +1332,57 @@ impl Interpreter {
         }
     }
 
+    fn format_array_with_dimensions(&self, data: &[Value], dimensions: &[usize], dim_index: usize) -> String {
+        if dimensions.is_empty() || data.is_empty() {
+            return "[]".to_string();
+        }
+        
+        let current_dim = dimensions[dim_index];
+        let remaining_dims = &dimensions[dim_index + 1..];
+        
+        // Calculate how many elements per sub-array at this dimension
+        let elements_per_sub = if remaining_dims.is_empty() {
+            1
+        } else {
+            remaining_dims.iter().product::<usize>()
+        };
+        
+        let mut result = String::new();
+        result.push('[');
+        
+        for i in 0..current_dim {
+            let start_idx = i * elements_per_sub;
+            let end_idx = (i + 1) * elements_per_sub;
+            
+            if start_idx >= data.len() {
+                break;
+            }
+            
+            let slice = &data[start_idx..end_idx.min(data.len())];
+            
+            if remaining_dims.is_empty() {
+                // Last dimension - just format the values
+                if !slice.is_empty() {
+                    result.push_str(&self.value_to_string(&slice[0]));
+                    for val in slice.iter().skip(1) {
+                        result.push_str(", ");
+                        result.push_str(&self.value_to_string(val));
+                    }
+                }
+            } else {
+                // Recursively format sub-arrays
+                result.push_str(&self.format_array_with_dimensions(slice, dimensions, dim_index + 1));
+            }
+            
+            if i < current_dim - 1 {
+                result.push_str(", ");
+            }
+        }
+        
+        result.push(']');
+        result
+    }
+
     fn value_to_string(&self, value: &Value) -> String {
         match value {
             Value::Integer(i) => i.to_string(),
@@ -1333,18 +1395,8 @@ impl Interpreter {
             Value::Enum { value, .. } => value.clone(),
             Value::Pointer { .. } => format!("{:?}", value),
             Value::Set { .. } => format!("{:?}", value),
-            Value::Array { data, .. } => {
-                let mut result = String::new();
-                result += "[";
-                for (i, value) in data.iter().enumerate() {
-                    result += &self.value_to_string(value);
-                    if i < data.len() - 1 {
-                        result += ", ";
-                    } else {
-                        result += "]";
-                    }
-                }
-                result
+            Value::Array { dimensions, data, .. } => {
+                self.format_array_with_dimensions(data, dimensions, 0)
             },
         }
     }
@@ -1400,26 +1452,33 @@ impl Interpreter {
                         self.error_with_context(&msg, "array access")
                     })?;
             
-                let mut index_positions = Vec::new();
-                for idx_val in index_vals {
-                    match idx_val {
-                        Value::Integer(i) => {
-                            if i < 1 {
-                                let msg = format!("Index must be >= 1, got {}", i);
-                                return Err(self.error_with_context(&msg, "array index validation"));
-                            }
-                            index_positions.push((i - 1) as usize);  // Convert 1-based to 0-based
-                        }
-                        _ => {
-                            let msg = format!("Index must be integer, got {:?}", idx_val);
+                match array_val {
+                    Value::Array { dimensions, start_indices, data, .. } => {
+                        if index_vals.len() != start_indices.len() {
+                            let msg = format!("Index dimension mismatch: expected {} dimensions, got {}", start_indices.len(), index_vals.len());
                             log_error!(msg, span.line);
                             return Err(msg);
                         }
-                    }
-                }
-            
-                match array_val {
-                    Value::Array { dimensions, data, .. } => {
+                        
+                        let mut index_positions = Vec::new();
+                        for (idx_val, start_idx) in index_vals.iter().zip(start_indices.iter()) {
+                            match idx_val {
+                                Value::Integer(i) => {
+                                    if *i < *start_idx {
+                                        let msg = format!("Index must be >= {}, got {}", start_idx, i);
+                                        return Err(self.error_with_context(&msg, "array index validation"));
+                                    }
+                                    // Convert user index to 0-based internal index
+                                    index_positions.push((i - start_idx) as usize);
+                                }
+                                _ => {
+                                    let msg = format!("Index must be integer, got {:?}", idx_val);
+                                    log_error!(msg, span.line);
+                                    return Err(msg);
+                                }
+                            }
+                        }
+                        
                         let flat_index = self.calculate_array_index(index_positions, dimensions)?;
                         if flat_index >= data.len() {
                             let msg = format!("Array index out of bounds: {}", flat_index);
@@ -1429,13 +1488,27 @@ impl Interpreter {
                         Ok(data[flat_index].clone())
                     }
                     Value::Set { elements, .. } => {
-                        // Sets only support single index
-                        if index_positions.len() != 1 {
-                            let msg = format!("Set access requires exactly 1 index, got {}", index_positions.len());
+                        // Sets use 1-based indexing (no start index stored)
+                        if index_vals.len() != 1 {
+                            let msg = format!("Set access requires exactly 1 index, got {}", index_vals.len());
                             log_error!(msg, span.line);
                             return Err(msg);
                         }
-                        let index = index_positions[0];
+                        let index = match &index_vals[0] {
+                            Value::Integer(i) => {
+                                if *i < 1 {
+                                    let msg = format!("Set index must be >= 1, got {}", i);
+                                    log_error!(msg, span.line);
+                                    return Err(msg);
+                                }
+                                (i - 1) as usize  // Convert 1-based to 0-based
+                            }
+                            _ => {
+                                let msg = format!("Set index must be integer, got {:?}", index_vals[0]);
+                                log_error!(msg, span.line);
+                                return Err(msg);
+                            }
+                        };
                         if index >= elements.len() {
                             let msg = format!("Set index out of bounds: {}", index);
                             log_error!(msg, span.line);
