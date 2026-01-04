@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pseudocode Web Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Pseudocode Web Editor</h1>
+            <div class="controls">
+                <button id="runBtn" class="btn btn-primary">▶ Run</button>
+                <button id="checkBtn" class="btn btn-secondary">✓ Check Syntax</button>
+                <button id="clearBtn" class="btn btn-secondary">Clear</button>
+                <select id="exampleSelect" class="btn btn-secondary">
+                    <option value="">Select Example...</option>
+                    <option value="bubble_sort">Bubble Sort</option>
+                    <option value="simple">Simple Example</option>
+                </select>
+                <button id="themeBtn" class="btn btn-secondary">🌙 Dark</button>
+            </div>
+        </header>
+        
+        <div class="editor-container">
+            <div id="editor" class="editor"></div>
+        </div>
+        
+        <div class="output-container">
+            <div class="output-header">
+                <h2>Output</h2>
+                <button id="clearOutputBtn" class="btn btn-small">Clear</button>
+            </div>
+            <div id="output" class="output"></div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
+
