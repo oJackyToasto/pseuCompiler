@@ -56,6 +56,7 @@ function initMonaco() {
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
     
     require(['vs/editor/editor.main'], function() {
+        console.log('Monaco Editor loaded');
         // Register pseudocode language
         monaco.languages.register({ id: 'pseudocode' });
         
@@ -116,7 +117,11 @@ function initMonaco() {
                 { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
                 { token: 'operator', foreground: 'd4d4d4' },
                 { token: 'type.identifier', foreground: '4ec9b0' }
-            ]
+            ],
+            colors: {
+                'editor.foreground': '#d4d4d4',
+                'editor.background': '#1e1e1e'
+            }
         });
 
         monaco.editor.defineTheme('pseudocode-light', {
@@ -129,20 +134,31 @@ function initMonaco() {
                 { token: 'comment', foreground: '008000', fontStyle: 'italic' },
                 { token: 'operator', foreground: '000000' },
                 { token: 'type.identifier', foreground: '267f99' }
-            ]
+            ],
+            colors: {
+                'editor.foreground': '#000000',
+                'editor.background': '#ffffff'
+            }
         });
 
         // Create editor
-        editor = monaco.editor.create(document.getElementById('editor'), {
+        const editorElement = document.getElementById('editor');
+        if (!editorElement) {
+            console.error('Editor element not found!');
+            return;
+        }
+        editor = monaco.editor.create(editorElement, {
             value: examples.simple,
             language: 'pseudocode',
             theme: 'pseudocode-dark',
             automaticLayout: true,
             fontSize: 14,
+            fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
             minimap: { enabled: true },
             scrollBeyondLastLine: false,
             wordWrap: 'on'
         });
+        console.log('Monaco Editor initialized successfully');
     });
 }
 
@@ -210,7 +226,8 @@ async function runCode() {
     
     try {
         const result = engine.execute(code);
-        const executionResult = JSON.parse(result);
+        // result is already a JavaScript object (JsValue), not a JSON string
+        const executionResult = result;
         
         let outputText = executionResult.output || '';
         
@@ -247,12 +264,13 @@ async function checkSyntax() {
     
     try {
         const result = engine.check_syntax(code);
-        const checkResult = JSON.parse(result);
+        // result is already a JavaScript object (JsValue), not a JSON string
+        const checkResult = result;
         
         if (checkResult.valid) {
-            showOutput('✓ Syntax check passed!', 'success');
+            showOutput('Syntax check passed!', 'success');
         } else {
-            let errorText = '✗ Syntax errors found:\n';
+            let errorText = 'Syntax errors found:\n';
             checkResult.errors.forEach(error => {
                 errorText += `Line ${error.line}: ${error.message}\n`;
             });
@@ -301,13 +319,13 @@ function toggleTheme() {
         if (editor) {
             monaco.editor.setTheme('pseudocode-dark');
         }
-        themeBtn.textContent = '🌙 Dark';
+        themeBtn.textContent = 'Dark';
     } else {
         body.classList.add('light');
         if (editor) {
             monaco.editor.setTheme('pseudocode-light');
         }
-        themeBtn.textContent = '☀️ Light';
+        themeBtn.textContent = 'Light';
     }
 }
 
@@ -341,5 +359,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
     }
 });
+
 
 
