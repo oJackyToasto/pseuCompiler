@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::env;
 use crate::parser::Parser;
 use crate::interpreter::Interpreter;
+use crate::log_error;
 
 pub fn run() {
     let args: Vec<String> = env::args().collect();
@@ -29,6 +30,9 @@ pub fn run() {
             } else if args.len() == 3 {
                 // Execute file
                 let filename = &args[2];
+                if validate_pseu_file(filename).is_err() {
+                    std::process::exit(1);
+                }
                 execute_file(filename);
             } else {
                 eprintln!("Error: 'eval' command takes 0 or 1 argument");
@@ -43,6 +47,9 @@ pub fn run() {
                 std::process::exit(1);
             }
             let filename = &args[2];
+            if validate_pseu_file(filename).is_err() {
+                std::process::exit(1);
+            }
             check_syntax(filename);
         }
         "compile" => {
@@ -52,6 +59,9 @@ pub fn run() {
                 std::process::exit(1);
             }
             let filename = &args[2];
+            if validate_pseu_file(filename).is_err() {
+                std::process::exit(1);
+            }
             compile_file(filename);
         }
         _ => {
@@ -59,6 +69,16 @@ pub fn run() {
             print_help();
             std::process::exit(1);
         }
+    }
+}
+
+/// Validate that the filename has a .pseu extension
+fn validate_pseu_file(filename: &str) -> Result<(), ()> {
+    if filename.ends_with(".pseu") {
+        Ok(())
+    } else {
+        log_error!(format!("File '{}' must have a .pseu extension", filename));
+        Err(())
     }
 }
 

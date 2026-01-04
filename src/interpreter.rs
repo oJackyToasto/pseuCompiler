@@ -117,6 +117,9 @@ pub struct Interpreter {
     
     // Source file directory for resolving relative file paths
     source_dir: Option<std::path::PathBuf>,
+    
+    // Constants - locked variables that cannot be reassigned
+    constants: std::collections::HashSet<String>,
 }
 
 impl Interpreter {
@@ -131,6 +134,7 @@ impl Interpreter {
             call_stack: Vec::new(),
             context_stack: Vec::new(),
             source_dir: None,
+            constants: std::collections::HashSet::new(),
         }
     }
     
@@ -149,6 +153,7 @@ impl Interpreter {
             call_stack: Vec::new(),
             context_stack: Vec::new(),
             source_dir,
+            constants: std::collections::HashSet::new(),
         }
     }
     
@@ -322,7 +327,56 @@ impl Interpreter {
                 self.variables_type.insert(name.clone(), type_def.clone());
                 Ok(())
             }
+            Stmt::Constant { name, value, span } => {
+                let constant_value = if let Some(expr) = value {
+                    // CONSTANT x <- expr (assign and lock)
+                    self.evaluate_expr(expr)?
+                } else {
+                    // CONSTANT x (lock with current value)
+                    self.variables.get(name)
+                        .ok_or_else(|| {
+                            let msg = format!("Constant '{}' cannot be locked: variable does not exist", name);
+                            log_error!(msg, span.line);
+                            msg
+                        })?
+                        .clone()
+                };
+                
+                // Store the constant value
+                self.variables.insert(name.clone(), constant_value.clone());
+                
+                // Infer type from value if not already set
+                if !self.variables_type.contains_key(name) {
+                    let inferred_type = match constant_value {
+                        Value::Integer(_) => Type::INTEGER,
+                        Value::Real(_) => Type::REAL,
+                        Value::Boolean(_) => Type::BOOLEAN,
+                        Value::Char(_) => Type::CHAR,
+                        Value::String(_) => Type::STRING,
+                        Value::Array { element_type, .. } => Type::ARRAY {
+                            dimensions: vec![],
+                            element_type: element_type.clone(),
+                        },
+                        _ => {
+                            let msg = format!("Cannot infer type for constant '{}'", name);
+                            log_error!(msg, span.line);
+                            return Err(msg);
+                        }
+                    };
+                    self.variables_type.insert(name.clone(), inferred_type);
+                }
+                
+                // Mark as constant (locked)
+                self.constants.insert(name.clone());
+                Ok(())
+            }
             Stmt::Assign { name, indices, expression, span } => {
+                // Check if trying to assign to a constant
+                if self.constants.contains(name) {
+                    let msg = format!("Cannot assign to constant '{}' - constants are locked", name);
+                    log_error!(msg, span.line);
+                    return Err(msg);
+                }
                 let value = self.evaluate_expr(expression)?;
 
                 // Check if this is a field access assignment (obj.field)

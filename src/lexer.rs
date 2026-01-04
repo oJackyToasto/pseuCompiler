@@ -203,7 +203,7 @@ impl Lexer {
             | "ENDWHILE" | "RETURN" | "INPUT" | "OUTPUT" | "THEN" | "CALL" | "REPEAT" | "DEFINE"
             | "OPENFILE" | "CLOSEFILE" | "WRITEFILE" | "SEEK" | "GETRECORD" | "PUTRECORD" | "TRUE" | "FALSE"
             | "READFILE" | "MOD" | "LENGTH" | "SET" | "OF" | "TO" | "STEP" | "UNTIL" | "ROUND" | "RAND"
-            | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE"
+            | "STRING" | "INTEGER" | "REAL" | "CHAR" | "BOOLEAN" | "DATE" | "ARRAY" | "ENDCASE" | "CONSTANT"
             | "UCASE" | "LCASE" | "READ" | "WRITE" | "RANDOM" | "CASE" | "OTHERWISE" | "DIV" | "INT"
             | "SUBSTRING" | "MID" | "RIGHT" | "EOF" => Token::Keyword(id),
             _ => Token::Identifier(id),

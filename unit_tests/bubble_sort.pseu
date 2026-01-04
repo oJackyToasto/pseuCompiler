@@ -2,6 +2,7 @@
 // Tests: arrays, nested loops, array indexing, comparisons, swaps
 
 DECLARE n <- 10: INTEGER
+CONSTANT n
 
 DECLARE arr : ARRAY[1:10] OF INTEGER
 DECLARE i : INTEGER

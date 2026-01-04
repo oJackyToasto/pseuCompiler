@@ -186,6 +186,7 @@ impl Parser {
             Token::Keyword(kw) => match kw.as_str() {
                 "DECLARE" => self.parse_declare(),
                 "DEFINE" => self.parse_define(),
+                "CONSTANT" => self.parse_constant(),
                 "TYPE" => self.parse_type_declaration(),
                 "IF" => self.parse_if(),
                 "WHILE" => self.parse_while(),
@@ -397,6 +398,32 @@ impl Parser {
             type_name,
             span,
         })
+    }
+
+    fn parse_constant(&mut self) -> Result<Stmt, String> {
+        let span = self.get_span();
+        self.expect(Token::Keyword("CONSTANT".to_string()))?;
+
+        let name = match self.current_token() {
+            Token::Identifier(n) => {
+                let name = n.clone();
+                self.advance();
+                name
+            }
+            _ => return Err(self.error_with_pos("Expected constant name")),
+        };
+
+        // Check if there's an assignment operator (<-)
+        let value = if matches!(self.current_token(), Token::LeftArrow) {
+            // CONSTANT x <- expr (assign and lock)
+            self.advance(); // consume <-
+            Some(Box::new(self.parse_expression()?))
+        } else {
+            // CONSTANT x (lock with current value)
+            None
+        };
+        
+        Ok(Stmt::Constant { name, value, span })
     }
 
     fn parse_call(&mut self) -> Result<Stmt, String> {

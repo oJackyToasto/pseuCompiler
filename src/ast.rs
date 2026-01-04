@@ -152,6 +152,12 @@ pub enum Stmt {
         span: Span,
     },
 
+    Constant {
+        name: String,
+        value: Option<Box<Expr>>,  // None means lock with current value
+        span: Span,
+    },
+
     If {
         condition: Box<Expr>,
         then_stmt: Vec<Stmt>,
