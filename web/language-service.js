@@ -30,24 +30,12 @@ export class PseudocodeLanguageService {
             // Use items directly - Rust already handles prefix filtering
             let items = completionResult.items || [];
             
-            // Debug: Log what we got from Rust
-            if (items.length > 0) {
-                console.log(`LanguageService: Got ${items.length} items from Rust, prefix="${prefix}"`);
-                const keywordCount = items.filter(i => i.kind === 'keyword').length;
-                const builtinCount = items.filter(i => i.kind === 'function' && i.detail === 'Built-in Function').length;
-                console.log(`  - Keywords: ${keywordCount}, Built-ins: ${builtinCount}, Variables: ${items.length - keywordCount - builtinCount}`);
-            }
-            
             // Additional filtering only if needed (Rust should handle this, but keep as fallback)
             if (prefix && prefix.length > 0) {
                 const prefixLower = prefix.toLowerCase();
-                const beforeFilter = items.length;
                 items = items.filter(item => 
                     item.label.toLowerCase().startsWith(prefixLower)
                 );
-                if (beforeFilter !== items.length) {
-                    console.log(`LanguageService: Filtered ${beforeFilter} -> ${items.length} items for prefix "${prefix}"`);
-                }
             }
 
             return items.map(item => ({

@@ -313,11 +313,9 @@ impl PseudocodeEngine {
         let statements = match parser.parse_program() {
             Ok(stmts) => stmts,
             Err(_) => {
-                // Return empty completions if parse fails completely
-                // In the future, we could do partial parsing
-                return serde_wasm_bindgen::to_value(&CompletionResult {
-                    items: Vec::new(),
-                }).unwrap();
+                // Even if parsing fails, we can still provide keywords and built-in functions
+                // Use empty statements vector - CompletionProvider will still return keywords/built-ins
+                Vec::new()
             }
         };
 

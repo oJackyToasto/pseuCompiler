@@ -68,7 +68,6 @@ function initMonaco() {
         monaco.languages.registerCompletionItemProvider('pseudocode', {
             provideCompletionItems: (model, position, context) => {
                 if (!languageService) {
-                    console.log('Autocomplete: languageService not initialized');
                     return { suggestions: [] };
                 }
 
@@ -82,8 +81,6 @@ function initMonaco() {
 
                 const code = model.getValue();
                 const prefix = word.word;
-                
-                console.log(`Autocomplete triggered: prefix="${prefix}", triggerKind=${context.triggerKind}, column=${position.column}`);
                 
                 // Always try to get suggestions - let the language service decide what to return
                 // (This ensures autocomplete works even on the first character typed)
@@ -108,14 +105,6 @@ function initMonaco() {
                         ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                         : undefined
                 }));
-
-                // Debug logging
-                if (items.length > 0) {
-                    console.log(`Autocomplete: Returning ${items.length} items for prefix "${prefix}"`);
-                    console.log('First 5 items:', items.slice(0, 5).map(i => i.label));
-                } else {
-                    console.log(`Autocomplete: No items for prefix "${prefix}"`);
-                }
 
                 return { 
                     suggestions: items,
