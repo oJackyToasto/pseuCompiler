@@ -914,7 +914,6 @@ impl Interpreter {
                     }
                 };
                 
-                // Remove file from open_files (Rust will automatically close it)
                 if self.open_files.remove(&filename_str).is_none() {
                     let msg = format!("File '{}' is not open", filename_str);
                     log_error!(msg, span.line);
@@ -934,11 +933,9 @@ impl Interpreter {
                     }
                 };
                 
-                // Get file handle
                 let file_handle = self.open_files.get_mut(&filename_str)
                     .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
                 
-                // Read a line from the file
                 let mut line = String::new();
                 match file_handle {
                     FileHandle::Read(reader) => {
@@ -946,7 +943,6 @@ impl Interpreter {
                             .map_err(|e| format!("Failed to read from file '{}': {}", filename_str, e))?;
                     },
                     FileHandle::Random(file) => {
-                        // Read line efficiently using a buffer
                         let mut buffer = [0u8; 1024];
                         let mut bytes_read = 0;
                         loop {
@@ -971,7 +967,6 @@ impl Interpreter {
                     },
                 }
                 
-                // Remove trailing newline
                 if line.ends_with('\n') {
                     line.pop();
                     if line.ends_with('\r') {
@@ -979,11 +974,9 @@ impl Interpreter {
                     }
                 }
                 
-                // Store in variable
                 let var_type = self.variables_type.get(name)
                     .ok_or_else(|| format!("Variable '{}' not found", name))?;
                 
-                // Ensure variable is STRING type
                 if !matches!(var_type, Type::STRING) {
                     let msg = format!("READFILE variable '{}' must be STRING type", name);
                     log_error!(msg, span.line);
@@ -1004,14 +997,12 @@ impl Interpreter {
                     }
                 };
                 
-                // Evaluate all expressions and convert to strings FIRST (before borrowing file handle)
                 let mut output = String::new();
                 for expr in exprs {
                     let value = self.evaluate_expr(expr)?;
                     output.push_str(&self.value_to_string(&value));
                 }
                 
-                // Get file handle AFTER evaluating expressions
                 let file_handle = self.open_files.get_mut(&filename_str)
                     .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
                 
@@ -1059,7 +1050,6 @@ impl Interpreter {
                     }
                 };
                 
-                // Get file handle (only RANDOM mode supports seek)
                 let file_handle = self.open_files.get_mut(&filename_str)
                     .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
                 
@@ -1078,7 +1068,6 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::GetRecord { filename, variable, span } => {
-                // GetRecord reads a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
@@ -1094,8 +1083,6 @@ impl Interpreter {
                 
                 match file_handle {
                     FileHandle::Random(file) => {
-                        // Read fixed-length record (you might need to determine record size)
-                        // For now, read a line as a simple implementation
                         let mut buffer = vec![0u8; 256]; // Fixed record size
                         match file.read_exact(&mut buffer) {
                             Ok(_) => {
@@ -1125,7 +1112,6 @@ impl Interpreter {
                 Ok(())
             }
             Stmt::PutRecord { filename, variable, span } => {
-                // PutRecord writes a fixed-length record (for binary/random access files)
                 let filename_val = self.evaluate_expr(filename)?;
                 let filename_str = match filename_val {
                     Value::String(s) => s,
@@ -1136,22 +1122,16 @@ impl Interpreter {
                     }
                 };
                 
-                // Get variable value to write
                 let var_value = self.variables.get(variable)
                     .ok_or_else(|| format!("Variable '{}' not found", variable))?;
                 
-                // Convert variable to string representation
                 let record_data = self.value_to_string(var_value);
                 
-                // Get file handle
                 let file_handle = self.open_files.get_mut(&filename_str)
                     .ok_or_else(|| format!("File '{}' is not open", filename_str))?;
                 
                 match file_handle {
                     FileHandle::Random(file) => {
-                        // Write fixed-length record (pad or truncate to fixed size)
-                        // For simplicity, we'll use a fixed size of 256 bytes
-                        // In a real implementation, you'd determine record size from type definition
                         let mut buffer = vec![0u8; 256];
                         let data_bytes = record_data.as_bytes();
                         let copy_len = data_bytes.len().min(256);
@@ -1220,7 +1200,6 @@ impl Interpreter {
                 Ok(Value::String(val_str.to_string()))
             }
             Type::CHAR => {
-                // Remove quotes if present ('A' -> A)
                 let ch = val_str.trim_matches('\'').chars().next()
                     .ok_or_else(|| format!("Invalid char: {}", val_str))?;
                 Ok(Value::Char(ch))
@@ -1247,7 +1226,6 @@ impl Interpreter {
             ));
         }
         
-        // Check bounds
         for (i, (idx, dim_size)) in indices.iter().zip(dimensions.iter()).enumerate() {
             if *idx >= *dim_size {
                 return Err(format!(
@@ -1257,9 +1235,6 @@ impl Interpreter {
             }
         }
         
-        // Calculate flat index using row-major order
-        // For [i, j, k] with dimensions [d1, d2, d3]:
-        // flat_index = i * (d2 * d3) + j * d3 + k
         let mut flat_index = 0;
         let mut stride = 1;
         
@@ -1340,7 +1315,6 @@ impl Interpreter {
         let current_dim = dimensions[dim_index];
         let remaining_dims = &dimensions[dim_index + 1..];
         
-        // Calculate how many elements per sub-array at this dimension
         let elements_per_sub = if remaining_dims.is_empty() {
             1
         } else {
@@ -1361,7 +1335,6 @@ impl Interpreter {
             let slice = &data[start_idx..end_idx.min(data.len())];
             
             if remaining_dims.is_empty() {
-                // Last dimension - just format the values
                 if !slice.is_empty() {
                     result.push_str(&self.value_to_string(&slice[0]));
                     for val in slice.iter().skip(1) {
@@ -1370,7 +1343,6 @@ impl Interpreter {
                     }
                 }
             } else {
-                // Recursively format sub-arrays
                 result.push_str(&self.format_array_with_dimensions(slice, dimensions, dim_index + 1));
             }
             
