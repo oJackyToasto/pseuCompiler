@@ -412,21 +412,9 @@ impl CompletionProvider {
                 }
             }
         }
-        // In assignment or expression - suggest variables, functions, built-ins, and keywords
+        // In assignment or expression - suggest variables, functions, built-ins
+        // (keywords and built-ins already added above)
         else {
-            // Suggest keywords (always available)
-            for &keyword in KEYWORDS {
-                if matches_prefix(keyword) {
-                    suggestions.push(CompletionItem {
-                        label: keyword.to_string(),
-                        kind: CompletionItemKind::Keyword,
-                        detail: Some("Keyword".to_string()),
-                        documentation: Some(Self::get_keyword_documentation(keyword)),
-                        insert_text: keyword.to_string(),
-                    });
-                }
-            }
-
             // Suggest variables
             for variable in &symbols.variables {
                 if matches_prefix(&variable.name) {

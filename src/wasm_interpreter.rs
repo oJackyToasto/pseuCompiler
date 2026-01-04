@@ -512,8 +512,10 @@ impl WasmInterpreter {
                 Ok(())
             }
             Stmt::Input { name, span } => {
+                // Clone the type to avoid holding a reference while mutating
                 let var_type = self.variables_type.get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
+                    .ok_or_else(|| format!("Variable {} not found", name))?
+                    .clone();
 
                 // Get input from queue, or return error if empty
                 let input = if let Some(input_val) = self.input_queue.pop() {
@@ -527,7 +529,7 @@ impl WasmInterpreter {
                 // Don't echo input - terminal handles echo in interactive mode
                 // (This allows for true terminal-like experience)
 
-                let value = match var_type {
+                let value = match &var_type {
                     Type::INTEGER => {
                         Value::Integer(input.parse().map_err(|_| format!("Invalid integer: '{}'", input))?)
                     }
