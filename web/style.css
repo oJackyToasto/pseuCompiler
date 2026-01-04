@@ -209,5 +209,128 @@ body.light .output::-webkit-scrollbar-thumb:hover {
     background: #a0a0a0;
 }
 
+/* Input Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background-color: #252526;
+    border: 1px solid #3e3e42;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    padding: 1rem;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #ffffff;
+}
+
+.modal-body {
+    padding: 1rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-body p {
+    margin-bottom: 1rem;
+    color: #d4d4d4;
+}
+
+.input-field {
+    margin-bottom: 1rem;
+}
+
+.input-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #d4d4d4;
+    font-weight: 500;
+}
+
+.input-field input {
+    width: 100%;
+    padding: 0.5rem;
+    background-color: #1e1e1e;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.input-field input:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
+.modal-footer {
+    padding: 1rem;
+    border-top: 1px solid #3e3e42;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Light theme for modal */
+body.light .modal-content {
+    background-color: #ffffff;
+    border-color: #e0e0e0;
+}
+
+body.light .modal-header {
+    border-bottom-color: #e0e0e0;
+}
+
+body.light .modal-header h2 {
+    color: #1e1e1e;
+}
+
+body.light .modal-body p {
+    color: #1e1e1e;
+}
+
+body.light .input-field label {
+    color: #1e1e1e;
+}
+
+body.light .input-field input {
+    background-color: #ffffff;
+    border-color: #e0e0e0;
+    color: #1e1e1e;
+}
+
+body.light .input-field input:focus {
+    border-color: #007acc;
+}
+
+body.light .modal-footer {
+    border-top-color: #e0e0e0;
+}
+
 
 

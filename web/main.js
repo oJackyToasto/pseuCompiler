@@ -313,6 +313,30 @@ async function runCode() {
     }
     
     clearErrorDecorations();
+    
+    try {
+        // Get all INPUT statements from the code
+        const inputVars = engine.get_input_statements(code);
+        const inputVarsArray = Array.isArray(inputVars) ? inputVars : [];
+        
+        if (inputVarsArray.length > 0) {
+            // Show input modal to collect values
+            showInputModal(inputVarsArray, () => {
+                // Callback when inputs are submitted - execute the code
+                executeCodeWithInputs(code);
+            });
+        } else {
+            // No inputs needed, execute directly
+            executeCodeWithInputs(code);
+        }
+    } catch (error) {
+        showOutput(`Error: ${error.message}`, 'error');
+        console.error('Execution error:', error);
+    }
+}
+
+// Execute code with inputs already in queue
+function executeCodeWithInputs(code) {
     showOutput('Running...', 'info');
     
     try {
@@ -336,6 +360,102 @@ async function runCode() {
         showOutput(`Error: ${error.message}`, 'error');
         console.error('Execution error:', error);
     }
+}
+
+// Show input modal and collect inputs
+function showInputModal(inputVars, onSubmit) {
+    const modal = document.getElementById('inputModal');
+    const inputFields = document.getElementById('inputFields');
+    const submitBtn = document.getElementById('submitInputsBtn');
+    const cancelBtn = document.getElementById('cancelInputsBtn');
+    
+    // Clear previous inputs
+    inputFields.innerHTML = '';
+    
+    // Create input fields for each variable
+    inputVars.forEach((varName, index) => {
+        const inputField = document.createElement('div');
+        inputField.className = 'input-field';
+        
+        const label = document.createElement('label');
+        label.textContent = `${varName}:`;
+        label.setAttribute('for', `input_${index}`);
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `input_${index}`;
+        input.name = varName;
+        input.placeholder = `Enter value for ${varName}`;
+        
+        // Handle Enter key to submit
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && index === inputVars.length - 1) {
+                submitBtn.click();
+            } else if (e.key === 'Enter') {
+                const nextInput = document.getElementById(`input_${index + 1}`);
+                if (nextInput) nextInput.focus();
+            }
+        });
+        
+        inputField.appendChild(label);
+        inputField.appendChild(input);
+        inputFields.appendChild(inputField);
+    });
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    // Focus first input
+    const firstInput = document.getElementById('input_0');
+    if (firstInput) {
+        setTimeout(() => firstInput.focus(), 100);
+    }
+    
+    // Submit handler
+    let submitHandler;
+    let cancelHandler;
+    
+    submitHandler = () => {
+        const inputs = inputVars.map(varName => {
+            const input = Array.from(inputFields.querySelectorAll('input')).find(
+                inp => inp.name === varName
+            );
+            return input ? input.value : '';
+        });
+        
+        // Clear any previous inputs
+        engine.clear_inputs();
+        
+        // Add all inputs to the queue (in reverse order since queue uses LIFO)
+        // So when INPUT statements execute in order, they pop in the correct order
+        for (let i = inputs.length - 1; i >= 0; i--) {
+            engine.add_input(inputs[i]);
+        }
+        
+        // Hide modal
+        modal.classList.remove('show');
+        
+        // Remove event listeners
+        submitBtn.removeEventListener('click', submitHandler);
+        cancelBtn.removeEventListener('click', cancelHandler);
+        
+        // Execute callback
+        onSubmit();
+    };
+    
+    // Cancel handler
+    cancelHandler = () => {
+        // Hide modal without executing
+        modal.classList.remove('show');
+        
+        // Remove event listeners
+        submitBtn.removeEventListener('click', submitHandler);
+        cancelBtn.removeEventListener('click', cancelHandler);
+    };
+    
+    // Add event listeners
+    submitBtn.addEventListener('click', submitHandler);
+    cancelBtn.addEventListener('click', cancelHandler);
 }
 
 // Check syntax
