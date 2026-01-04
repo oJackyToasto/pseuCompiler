@@ -4,7 +4,7 @@ import { PseudocodeLanguageService } from './language-service.js';
 let engine = null;
 let editor = null;
 let errorDecorations = [];
-let languageService = new PseudocodeLanguageService();
+let languageService = null;
 
 // Example code
 const examples = {
@@ -65,6 +65,10 @@ function initMonaco() {
         // Register completion item provider for autocomplete
         monaco.languages.registerCompletionItemProvider('pseudocode', {
             provideCompletionItems: (model, position) => {
+                if (!languageService) {
+                    return { suggestions: [] };
+                }
+
                 const word = model.getWordUntilPosition(position);
                 const range = {
                     startLineNumber: position.lineNumber,
@@ -117,6 +121,10 @@ function initMonaco() {
         // Register hover provider
         monaco.languages.registerHoverProvider('pseudocode', {
             provideHover: (model, position) => {
+                if (!languageService) {
+                    return null;
+                }
+
                 const code = model.getValue();
                 const hoverInfo = languageService.getHoverInfo(
                     code,
@@ -249,6 +257,7 @@ async function initWasm() {
     try {
         await init();
         engine = new PseudocodeEngine();
+        languageService = new PseudocodeLanguageService(engine);
         console.log('WASM initialized successfully');
     } catch (error) {
         console.error('Failed to initialize WASM:', error);

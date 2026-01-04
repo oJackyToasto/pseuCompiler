@@ -2,11 +2,13 @@ mod lexer;
 mod parser;
 mod ast;
 mod wasm_interpreter;
+mod language_service;
 
 use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 use crate::wasm_interpreter::WasmInterpreter;
 use crate::parser::Parser;
+use crate::language_service::{CompletionProvider, HoverProvider, CompletionItemKind};
 
 // Initialize panic hook for better error messages in the browser
 #[wasm_bindgen(start)]
@@ -31,6 +33,25 @@ pub struct ErrorInfo {
 pub struct SyntaxCheckResult {
     pub valid: bool,
     pub errors: Vec<ErrorInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CompletionItem {
+    pub label: String,
+    pub kind: String, // "keyword", "function", "variable", "constant", "type"
+    pub detail: Option<String>,
+    pub documentation: Option<String>,
+    pub insert_text: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CompletionResult {
+    pub items: Vec<CompletionItem>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HoverInfo {
+    pub contents: String,
 }
 
 #[wasm_bindgen]
@@ -138,6 +159,72 @@ impl PseudocodeEngine {
     #[wasm_bindgen]
     pub fn add_input(&mut self, input: String) {
         self.interpreter.add_input(input);
+    }
+
+    /// Get autocomplete suggestions at a given position
+    #[wasm_bindgen]
+    pub fn get_completions(&self, code: &str, line: usize, column: usize) -> JsValue {
+        // Try to parse the code (best effort - collect symbols even if parse fails)
+        let mut parser = Parser::new(code);
+        let statements = match parser.parse_program() {
+            Ok(stmts) => stmts,
+            Err(_) => {
+                // Return empty completions if parse fails completely
+                // In the future, we could do partial parsing
+                return serde_wasm_bindgen::to_value(&CompletionResult {
+                    items: Vec::new(),
+                }).unwrap();
+            }
+        };
+
+        let items = CompletionProvider::get_completions(code, line, column, &statements);
+        
+        // Convert to WASM-compatible format
+        let wasm_items: Vec<CompletionItem> = items.into_iter()
+            .map(|item| CompletionItem {
+                label: item.label,
+                kind: match item.kind {
+                    CompletionItemKind::Keyword => "keyword".to_string(),
+                    CompletionItemKind::Function => "function".to_string(),
+                    CompletionItemKind::Variable => "variable".to_string(),
+                    CompletionItemKind::Constant => "constant".to_string(),
+                    CompletionItemKind::Type => "type".to_string(),
+                },
+                detail: item.detail,
+                documentation: item.documentation,
+                insert_text: item.insert_text,
+            })
+            .collect();
+
+        serde_wasm_bindgen::to_value(&CompletionResult {
+            items: wasm_items,
+        }).unwrap()
+    }
+
+    /// Get hover information at a given position
+    #[wasm_bindgen]
+    pub fn get_hover(&self, code: &str, line: usize, column: usize) -> JsValue {
+        // Try to parse the code (best effort)
+        let mut parser = Parser::new(code);
+        let statements = match parser.parse_program() {
+            Ok(stmts) => stmts,
+            Err(_) => {
+                // Return empty hover if parse fails
+                return serde_wasm_bindgen::to_value(&HoverInfo {
+                    contents: String::new(),
+                }).unwrap();
+            }
+        };
+
+        if let Some(contents) = HoverProvider::get_hover_info(code, line, column, &statements) {
+            serde_wasm_bindgen::to_value(&HoverInfo {
+                contents,
+            }).unwrap()
+        } else {
+            serde_wasm_bindgen::to_value(&HoverInfo {
+                contents: String::new(),
+            }).unwrap()
+        }
     }
 }
 
