@@ -256,7 +256,7 @@ fn execute_file(filename: &str) {
                         }
                     }
                 }
-                Err(e) => {
+                Err(_) => {
                     std::process::exit(1);
                 }
             }

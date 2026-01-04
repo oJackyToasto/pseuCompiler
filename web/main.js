@@ -1,8 +1,10 @@
 import init, { PseudocodeEngine } from './pkg/pseudocode_wasm.js';
+import { PseudocodeLanguageService } from './language-service.js';
 
 let engine = null;
 let editor = null;
 let errorDecorations = [];
+let languageService = new PseudocodeLanguageService();
 
 // Example code
 const examples = {
@@ -59,6 +61,86 @@ function initMonaco() {
         console.log('Monaco Editor loaded');
         // Register pseudocode language
         monaco.languages.register({ id: 'pseudocode' });
+        
+        // Register completion item provider for autocomplete
+        monaco.languages.registerCompletionItemProvider('pseudocode', {
+            provideCompletionItems: (model, position) => {
+                const word = model.getWordUntilPosition(position);
+                const range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn
+                };
+
+                const code = model.getValue();
+                const prefix = word.word;
+                const suggestions = languageService.getSuggestions(
+                    code,
+                    position.lineNumber,
+                    position.column,
+                    prefix
+                );
+
+                // Convert to Monaco completion items
+                const items = suggestions.map(suggestion => ({
+                    label: suggestion.label,
+                    kind: mapSuggestionKindToMonaco(suggestion.kind),
+                    detail: suggestion.detail,
+                    documentation: typeof suggestion.documentation === 'string' 
+                        ? { value: suggestion.documentation }
+                        : suggestion.documentation,
+                    insertText: suggestion.insertText || suggestion.label,
+                    range: range,
+                    insertTextRules: suggestion.insertText && suggestion.insertText.endsWith('(')
+                        ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                        : undefined
+                }));
+
+                return { suggestions: items };
+            },
+            triggerCharacters: [' ', ':', '(', '<']
+        });
+
+        // Helper to map our suggestion kinds to Monaco kinds
+        function mapSuggestionKindToMonaco(kind) {
+            const kindMap = {
+                'keyword': monaco.languages.CompletionItemKind.Keyword,
+                'function': monaco.languages.CompletionItemKind.Function,
+                'variable': monaco.languages.CompletionItemKind.Variable,
+                'constant': monaco.languages.CompletionItemKind.Constant,
+                'type': monaco.languages.CompletionItemKind.TypeParameter
+            };
+            return kindMap[kind] || monaco.languages.CompletionItemKind.Text;
+        }
+
+        // Register hover provider
+        monaco.languages.registerHoverProvider('pseudocode', {
+            provideHover: (model, position) => {
+                const code = model.getValue();
+                const hoverInfo = languageService.getHoverInfo(
+                    code,
+                    position.lineNumber,
+                    position.column
+                );
+
+                if (hoverInfo) {
+                    return {
+                        range: new monaco.Range(
+                            position.lineNumber,
+                            position.column,
+                            position.lineNumber,
+                            position.column
+                        ),
+                        contents: hoverInfo.contents.map(item => ({
+                            value: item.value
+                        }))
+                    };
+                }
+
+                return null;
+            }
+        });
         
         // Define syntax highlighting
         monaco.languages.setMonarchTokensProvider('pseudocode', {
