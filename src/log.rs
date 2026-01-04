@@ -47,17 +47,38 @@ pub fn init() {
         .init();
 }
 
-/// Log an error message with optional line number
+
 #[macro_export]
 macro_rules! log_error {
     ($msg:expr) => {
-        log::error!("{}", $msg);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            log::error!("{}", $msg);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            eprintln!("Error: {}", $msg);
+        }
     };
     ($msg:expr, $line:expr) => {
-        log::error!("{} (at line {})", $msg, $line);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            log::error!("{} (at line {})", $msg, $line);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            eprintln!("Error at line {}: {}", $line, $msg);
+        }
     };
     ($($arg:tt)*) => {
-        log::error!($($arg)*);
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            log::error!($($arg)*);
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            eprintln!("Error: {}", format!($($arg)*));
+        }
     };
 }
 

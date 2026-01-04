@@ -229,7 +229,7 @@ impl WasmInterpreter {
                                 Value::Integer(i) => i,
                                 _ => {
                                     let msg = format!("Invalid start index type: {:?}", start_val);
-                                    // Error:(msg, span.line);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
                                     return Err(msg);
                                 }
                             };
@@ -237,14 +237,14 @@ impl WasmInterpreter {
                                 Value::Integer(i) => i,
                                 _ => {
                                     let msg = format!("Invalid end index type: {:?}", end_val);
-                                    // Error:(msg, span.line);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
                                     return Err(msg);
                                 }
                             };
 
                             if start < 1 || end < start {
                                 let msg = format!("Invalid array dimensions: start index must be >= 1 and end index must be >= start index");
-                                // Error:(msg, span.line);
+                                eprintln!("Error at line {}: {}", span.line, msg);
                                 return Err(msg);
                             }
 
@@ -290,7 +290,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("Unsupported type: {:?}", type_name);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -314,7 +314,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("Define statement for type {} is not supported", type_name);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         return Err(msg);
                     }
                 };
@@ -332,7 +332,7 @@ impl WasmInterpreter {
                     self.variables.get(name)
                         .ok_or_else(|| {
                             let msg = format!("Constant '{}' cannot be locked: variable does not exist", name);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             msg
                         })?
                         .clone()
@@ -355,7 +355,7 @@ impl WasmInterpreter {
                         },
                         _ => {
                             let msg = format!("Cannot infer type for constant '{}'", name);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                     };
@@ -370,7 +370,7 @@ impl WasmInterpreter {
                 // Check if trying to assign to a constant
                 if self.constants.contains(name) {
                     let msg = format!("Cannot assign to constant '{}' - constants are locked", name);
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return Err(msg);
                 }
                 let value = self.evaluate_expr(expression)?;
@@ -392,7 +392,7 @@ impl WasmInterpreter {
                         }
                         _ => {
                             let msg = format!("Field access on non-record variable: {}", obj_name);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                     }
@@ -414,7 +414,7 @@ impl WasmInterpreter {
                         }
                         _ => {
                             let msg = format!("Pointer dereference assignment on non-pointer variable: {}", ptr_name);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                     }
@@ -433,14 +433,14 @@ impl WasmInterpreter {
                             Value::Integer(i) => {
                                 if i < 1 {
                                     let msg = format!("Invalid index: {}", i);
-                                    // Error:(msg, span.line);
+                                    eprintln!("Error at line {}: {}", span.line, msg);
                                     return Err(msg);
                                 }
                                 index_pos.push((i - 1) as usize);
                             }
                             _ => {
                                 let msg = format!("Invalid index type: {:?}", idx_val);
-                                // Error:(msg, span.line);
+                                eprintln!("Error at line {}: {}", span.line, msg);
                                 return Err(msg);
                             }
                         }
@@ -451,7 +451,7 @@ impl WasmInterpreter {
                         Some(Value::Array { dimensions, .. }) => dimensions.clone(),
                         Some(Value::Set { .. }) => {
                             let msg = format!("Cannot assign to set '{}' - sets are immutable", name);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                         Some(_) => return Err(format!("Variable '{}' is not an array", name)),
@@ -469,7 +469,7 @@ impl WasmInterpreter {
                         Value::Array { data, .. } => {
                             if flat_idx >= data.len() {
                                 let msg = format!("Index out of bounds: {} for array {}", flat_idx, name);
-                                // Error:(msg, span.line);
+                                eprintln!("Error at line {}: {}", span.line, msg);
                                 return Err(msg);
                             }
                             data[flat_idx] = value;
@@ -477,7 +477,7 @@ impl WasmInterpreter {
                         }
                         _ => {
                             let msg = format!("Invalid array type: {:?}", array);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                     }
@@ -756,7 +756,7 @@ impl WasmInterpreter {
 
                 if self.functions.contains_key(&func_name) {
                     let msg = format!("Function {} already declared", func_name);
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return Err(msg);
                 }
 
@@ -768,7 +768,7 @@ impl WasmInterpreter {
 
                 if self.procedures.contains_key(&proc_name) {
                     let msg = format!("Procedure {} already declared", proc_name);
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return Err(msg);
                 }
 
@@ -827,7 +827,7 @@ impl WasmInterpreter {
                 // RETURN should only be used inside functions
                 // This case handles RETURN in the main program (which is an error)
                 let msg = "RETURN statement outside of function".to_string();
-                // Error:(msg, span.line);
+                eprintln!("Error at line {}: {}", span.line, msg);
                 Err(msg)
             }
 
@@ -837,12 +837,14 @@ impl WasmInterpreter {
                     Value::String(s) => s,
                     _ => {
                         let msg = format!("Filename must be a string, got {:?}", filename_val);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         return Err(msg);
                     }
                 };
 
                 if self.open_files.contains_key(&filename_str) {
                     let msg = format!("File {} already open", filename_str);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return Err(msg);
                 }
 
@@ -1243,7 +1245,7 @@ impl WasmInterpreter {
             Type::Enum { name, values } => {
                 if values.is_empty() {
                     let msg = format!("Enum type {} has no values", name);
-                    // Error:(msg);
+                    eprintln!("Error: {}", msg);
                     return Err(msg);
                 }
                 Ok(Value::Enum {
@@ -1269,10 +1271,61 @@ impl WasmInterpreter {
             
             _ => {
                 let msg = format!("Unsupported type: {:?}", type_name);
-                // Error:("{}", msg);
+                eprintln!("Error: {}", msg);
                 Err(msg)
             }
         }
+    }
+
+    fn format_array_with_dimensions(&self, data: &[Value], dimensions: &[usize], dim_index: usize) -> String {
+        if dimensions.is_empty() || data.is_empty() {
+            return "[]".to_string();
+        }
+        
+        let current_dim = dimensions[dim_index];
+        let remaining_dims = &dimensions[dim_index + 1..];
+        
+        // Calculate how many elements per sub-array at this dimension
+        let elements_per_sub = if remaining_dims.is_empty() {
+            1
+        } else {
+            remaining_dims.iter().product::<usize>()
+        };
+        
+        let mut result = String::new();
+        result.push('[');
+        
+        for i in 0..current_dim {
+            let start_idx = i * elements_per_sub;
+            let end_idx = (i + 1) * elements_per_sub;
+            
+            if start_idx >= data.len() {
+                break;
+            }
+            
+            let slice = &data[start_idx..end_idx.min(data.len())];
+            
+            if remaining_dims.is_empty() {
+                // Last dimension - just format the values
+                if !slice.is_empty() {
+                    result.push_str(&self.value_to_string(&slice[0]));
+                    for val in slice.iter().skip(1) {
+                        result.push_str(", ");
+                        result.push_str(&self.value_to_string(val));
+                    }
+                }
+            } else {
+                // Recursively format sub-arrays
+                result.push_str(&self.format_array_with_dimensions(slice, dimensions, dim_index + 1));
+            }
+            
+            if i < current_dim - 1 {
+                result.push_str(", ");
+            }
+        }
+        
+        result.push(']');
+        result
     }
 
     fn value_to_string(&self, value: &Value) -> String {
@@ -1287,7 +1340,9 @@ impl WasmInterpreter {
             Value::Enum { value, .. } => value.clone(),
             Value::Pointer { .. } => format!("{:?}", value),
             Value::Set { .. } => format!("{:?}", value),
-            Value::Array { .. } => format!("{:?}", value),
+            Value::Array { dimensions, data, .. } => {
+                self.format_array_with_dimensions(data, dimensions, 0)
+            },
         }
     }
 
@@ -1354,7 +1409,7 @@ impl WasmInterpreter {
                         }
                         _ => {
                             let msg = format!("Index must be integer, got {:?}", idx_val);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                     }
@@ -1365,7 +1420,7 @@ impl WasmInterpreter {
                         let flat_index = self.calculate_array_index(index_positions, dimensions)?;
                         if flat_index >= data.len() {
                             let msg = format!("Array index out of bounds: {}", flat_index);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                         Ok(data[flat_index].clone())
@@ -1374,13 +1429,13 @@ impl WasmInterpreter {
                         // Sets only support single index
                         if index_positions.len() != 1 {
                             let msg = format!("Set access requires exactly 1 index, got {}", index_positions.len());
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                         let index = index_positions[0];
                         if index >= elements.len() {
                             let msg = format!("Set index out of bounds: {}", index);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return Err(msg);
                         }
                         Ok(elements[index].clone())
@@ -1388,12 +1443,12 @@ impl WasmInterpreter {
                     Value::Enum { .. } => {
                         // Enums don't support indexed access - they're single values
                         let msg = format!("Cannot use indexed access on enum value: {}", array);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                     _ => {
                         let msg = format!("Indexed access on unsupported type: {}", array);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1408,7 +1463,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("Field access on non-record value: {:?}", object_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1432,7 +1487,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("Pointer reference (^) can only be applied to variables, got {:?}", target);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1523,7 +1578,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("Pointer dereference (^) can only be applied to pointer values, got {:?}", ptr_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1619,7 +1674,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("MOD requires 2 arguments, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let arg1 = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1628,14 +1683,14 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Integer(r)) => {
                         if *r == 0 {
                             let msg = format!("Modulo by zero");
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return None;
                         }
                         Some(Value::Integer(l % r))
                     }
                     _ => {
                         let msg = format!("MOD requires integer arguments, got {:?} and {:?}", arg1, arg2);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1644,7 +1699,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("DIV expects 2 arguments, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let arg1 = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1653,14 +1708,14 @@ impl WasmInterpreter {
                     (Value::Integer(x), Value::Integer(y)) => {
                         if *y == 0 {
                             let msg = format!("Division by zero in DIV");
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return None;
                         }
                         Some(Value::Integer(x / y))
                     }
                     _ => {
                         let msg = format!("DIV requires integer arguments, got {:?} and {:?}", arg1, arg2);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1669,7 +1724,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("LENGTH expects 1 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1677,7 +1732,7 @@ impl WasmInterpreter {
                     Value::String(s) => Some(Value::Integer(s.len() as i32)),
                     _ => {
                         let msg = format!("LENGTH requires string argument, got {:?}", str_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1686,7 +1741,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("UCASE expects 1 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1695,7 +1750,7 @@ impl WasmInterpreter {
                     Value::Char(c) => Some(Value::String(c.to_uppercase().to_string())),
                     _ => {
                         let msg = format!("UCASE requires string or char argument, got {:?}", str_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1704,7 +1759,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("LCASE expects 1 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1713,7 +1768,7 @@ impl WasmInterpreter {
                     Value::Char(c) => Some(Value::String(c.to_lowercase().to_string())),
                     _ => {
                         let msg = format!("LCASE requires string or char argument, got {:?}", str_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1722,7 +1777,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 3 {
                     let msg = format!("{} expects 3 arguments (string, start, length), got {}", name, args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1742,7 +1797,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("{} expects (STRING, INTEGER, INTEGER) arguments, got {:?}, {:?}, {:?}", name, str_val, start_val, length_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1751,7 +1806,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("RIGHT expects 2 arguments, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let str_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1760,7 +1815,7 @@ impl WasmInterpreter {
                     (Value::String(s), Value::Integer(length)) => {
                         if *length < 0 {
                             let msg = format!("RIGHT requires non-negative length, got {}", length);
-                            // Error:(msg, span.line);
+                            eprintln!("Error at line {}: {}", span.line, msg);
                             return None;
                         }
                         // Handle case where length > string length
@@ -1770,7 +1825,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("RIGHT expects (STRING, INTEGER) arguments, got {:?}, {:?}", str_val, length_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1779,7 +1834,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 0 {
                     let msg = format!("RANDOM expects 0 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 Some(Value::Real(rand::thread_rng().gen_range(0.0..=1.0)))
@@ -1788,7 +1843,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("RAND expects 1 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let max_val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1796,7 +1851,7 @@ impl WasmInterpreter {
                     Value::Integer(max) => Some(Value::Real(rand::thread_rng().gen_range(0.0..=*max as f64))),
                     _ => {
                         let msg = format!("RAND requires integer argument, got {:?}", max_val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }   
@@ -1805,7 +1860,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 2 {
                     let msg = format!("ROUND expects 2 arguments, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1826,7 +1881,7 @@ impl WasmInterpreter {
                     }
                     _ => {
                         let msg = format!("ROUND requires numeric argument, got {:?}", val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1835,7 +1890,7 @@ impl WasmInterpreter {
                 let args_vec = args.as_ref()?;
                 if args_vec.len() != 1 {
                     let msg = format!("INT expects 1 argument, got {}", args_vec.len());
-                    // Error:(msg, span.line);
+                    eprintln!("Error at line {}: {}", span.line, msg);
                     return None;
                 }
                 let val = self.evaluate_expr(&args_vec[0]).ok()?;
@@ -1844,7 +1899,7 @@ impl WasmInterpreter {
                     Value::Integer(i) => Some(Value::Integer(*i)),
                     _ => {
                         let msg = format!("INT requires numeric argument, got {:?}", val);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         None
                     }
                 }
@@ -1890,7 +1945,7 @@ impl WasmInterpreter {
                     Value::Real(l) => Ok(Value::Real(-l)),
                     _ => {
                         let msg = format!("Unsupported negation operation: {:?}", op);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1901,7 +1956,7 @@ impl WasmInterpreter {
                     Value::Boolean(l) => Ok(Value::Boolean(!l)),
                     _ => {
                         let msg = format!("Unsupported NOT operation: {:?}", op);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1916,12 +1971,15 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l + r)),
                     (Value::Real(l), Value::Real(r)) => Ok(Value::Real(l + r)),
                     (Value::String(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l, r))),
+                    (Value::String(l), Value::Integer(r)) => Ok(Value::String(format!("{}{}", l, r.to_string()))),
+                    (Value::Integer(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l.to_string(), r))),
+                    (Value::String(l), Value::Real(r)) => Ok(Value::String(format!("{}{}", l, r.to_string()))),
+                    (Value::Real(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l.to_string(), r))),
                     (Value::Char(l), Value::Char(r)) => Ok(Value::String(format!("{}{}", l, r))),
                     (Value::Real(l), Value::Integer(r)) => Ok(Value::Real(l + *r as f64)),
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 + r)),
                     _ => {
                         let msg = format!("Unsupported addition operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
                         Err(msg)
                     }
                 }
@@ -1934,7 +1992,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 - r)),
                     _ => {
                         let msg = format!("Unsupported subtraction operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -1947,7 +2005,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 * r)),
                     _ => {
                         let msg = format!("Unsupported multiplication operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2014,7 +2072,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) == *r)),
                     _ => {
                         let msg = format!("Unsupported equality operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2029,7 +2087,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) != *r)),
                     _ => {
                         let msg = format!("Unsupported not equals operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2042,7 +2100,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) < *r)),
                     _ => {
                         let msg = format!("Unsupported less than operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2055,7 +2113,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) > *r)),
                     _ => {
                         let msg = format!("Unsupported greater than operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2068,7 +2126,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) <= *r)),
                     _ => {
                         let msg = format!("Unsupported less than or equal operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2081,7 +2139,7 @@ impl WasmInterpreter {
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Boolean((*l as f64) >= *r)),
                     _ => {
                         let msg = format!("Unsupported greater than or equal operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2091,7 +2149,7 @@ impl WasmInterpreter {
                     (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l && *r)),
                     _ => {
                         let msg = format!("Unsupported AND operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
@@ -2101,7 +2159,7 @@ impl WasmInterpreter {
                     (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(*l || *r)),
                     _ => {
                         let msg = format!("Unsupported OR operation: {:?} with {:?} and {:?}", op, left, right);
-                        // Error:(msg, span.line);
+                        eprintln!("Error at line {}: {}", span.line, msg);
                         Err(msg)
                     }
                 }
