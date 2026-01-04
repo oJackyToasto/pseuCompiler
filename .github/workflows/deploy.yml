@@ -29,11 +29,12 @@ jobs:
       - name: Build WASM
         run: wasm-pack build --target web --out-dir web/pkg
 
-      - name: Verify WASM files
+      - name: Verify WASM files before deploy
         run: |
-          echo "Checking for WASM files..."
-          ls -la web/pkg/ || echo "pkg directory not found"
-          ls -la web/ || echo "web directory listing"
+          echo "Files in web/pkg:"
+          ls -la web/pkg/
+          echo "Checking if pkg exists:"
+          test -d web/pkg && echo "✓ pkg directory exists" || echo "✗ pkg directory missing"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
@@ -41,3 +42,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./web
           force_orphan: true
+          keep_files: false
+          exclude_assets: '.github'
