@@ -1,0 +1,9 @@
+FUNCTION func(name:STRING, age:INTEGER) RETURNS STRING
+    RETURN "Hello! " + name + "! You are " + age + " years old!"
+ENDFUNCTION
+
+DECLARE x : STRING
+INPUT x
+DECLARE i : INTEGER
+INPUT i
+OUTPUT func(x, i)

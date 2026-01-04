@@ -50,5 +50,5 @@ FOR i <- 1 TO n - 1
     ENDIF
 NEXT i
 OUTPUT "Array is correctly sorted!"
-
+OUTPUT arr
 

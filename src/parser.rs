@@ -1,6 +1,6 @@
 use crate::ast::{Expr, BinaryOp, UnaryOp, Stmt, Type, FileMode, CaseBranch, TypeDeclarationVariant, TypeField, Function, Param, Procedure, Span};
 use crate::lexer::{Token, Lexer, TokenWithPos};
-use log::{debug, trace, error};
+use log::{debug, trace, error,};
 
 pub struct Parser {
     tokens: Vec<Token>,

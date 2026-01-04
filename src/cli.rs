@@ -235,8 +235,8 @@ fn run_interactive() {
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("Parse Error: {}", e);
+            Err(_e) => {
+                break;
             }
         }
     }
@@ -257,7 +257,6 @@ fn execute_file(filename: &str) {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Parse Error: {}", e);
                     std::process::exit(1);
                 }
             }

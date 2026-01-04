@@ -1333,7 +1333,19 @@ impl Interpreter {
             Value::Enum { value, .. } => value.clone(),
             Value::Pointer { .. } => format!("{:?}", value),
             Value::Set { .. } => format!("{:?}", value),
-            Value::Array { .. } => format!("{:?}", value),
+            Value::Array { data, .. } => {
+                let mut result = String::new();
+                result += "[";
+                for (i, value) in data.iter().enumerate() {
+                    result += &self.value_to_string(value);
+                    if i < data.len() - 1 {
+                        result += ", ";
+                    } else {
+                        result += "]";
+                    }
+                }
+                result
+            },
         }
     }
 
@@ -1641,7 +1653,7 @@ impl Interpreter {
                 break; // Exit function
             } else {
                 // Execute other statements normally
-                self.evaluate_stmt(stmt)?;
+                self.evaluate_stmt(&stmt)?;
             }
         }
         
@@ -1977,6 +1989,10 @@ impl Interpreter {
                     (Value::Integer(l), Value::Integer(r)) => Ok(Value::Integer(l + r)),
                     (Value::Real(l), Value::Real(r)) => Ok(Value::Real(l + r)),
                     (Value::String(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l, r))),
+                    (Value::String(l), Value::Integer(r)) => Ok(Value::String(format!("{}{}", l, r.to_string()))),
+                    (Value::Integer(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l.to_string(), r))),
+                    (Value::String(l), Value::Real(r)) => Ok(Value::String(format!("{}{}", l, r.to_string()))),
+                    (Value::Real(l), Value::String(r)) => Ok(Value::String(format!("{}{}", l.to_string(), r))),
                     (Value::Char(l), Value::Char(r)) => Ok(Value::String(format!("{}{}", l, r))),
                     (Value::Real(l), Value::Integer(r)) => Ok(Value::Real(l + *r as f64)),
                     (Value::Integer(l), Value::Real(r)) => Ok(Value::Real(*l as f64 + r)),
