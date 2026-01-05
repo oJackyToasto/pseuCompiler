@@ -344,6 +344,37 @@ impl CompletionProvider {
             }
         }
 
+        // Always include variables (without scope filtering for now)
+        for variable in &symbols.variables {
+            if matches_prefix(&variable.name) {
+                let detail = if let Some(ref type_name) = variable.type_name {
+                    format!("Variable: {:?}", type_name)
+                } else {
+                    "Variable".to_string()
+                };
+                suggestions.push(CompletionItem {
+                    label: variable.name.clone(),
+                    kind: CompletionItemKind::Variable,
+                    detail: Some(detail),
+                    documentation: Some(format!("Variable: {}", variable.name)),
+                    insert_text: variable.name.clone(),
+                });
+            }
+        }
+
+        // Always include constants (without scope filtering for now)
+        for constant in &symbols.constants {
+            if matches_prefix(&constant.name) {
+                suggestions.push(CompletionItem {
+                    label: constant.name.clone(),
+                    kind: CompletionItemKind::Constant,
+                    detail: Some("Constant".to_string()),
+                    documentation: Some(format!("Constant: {}", constant.name)),
+                    insert_text: constant.name.clone(),
+                });
+            }
+        }
+
         if context.after_declare {
             for &type_name in TYPES {
                 if matches_prefix(type_name) {
@@ -412,39 +443,9 @@ impl CompletionProvider {
                 }
             }
         }
-        // In assignment or expression - suggest variables, functions, built-ins
-        // (keywords and built-ins already added above)
+        // In assignment or expression - suggest user-defined functions and procedures
+        // (keywords, built-ins, variables, and constants already added above)
         else {
-            // Suggest variables
-            for variable in &symbols.variables {
-                if matches_prefix(&variable.name) {
-                    let detail = if let Some(ref type_name) = variable.type_name {
-                        format!("Variable: {:?}", type_name)
-                    } else {
-                        "Variable".to_string()
-                    };
-                    suggestions.push(CompletionItem {
-                        label: variable.name.clone(),
-                        kind: CompletionItemKind::Variable,
-                        detail: Some(detail),
-                        documentation: Some(format!("Variable: {}", variable.name)),
-                        insert_text: variable.name.clone(),
-                    });
-                }
-            }
-
-            // Suggest constants
-            for constant in &symbols.constants {
-                if matches_prefix(&constant.name) {
-                    suggestions.push(CompletionItem {
-                        label: constant.name.clone(),
-                        kind: CompletionItemKind::Constant,
-                        detail: Some("Constant".to_string()),
-                        documentation: Some(format!("Constant: {}", constant.name)),
-                        insert_text: constant.name.clone(),
-                    });
-                }
-            }
 
 
             // Suggest user-defined functions and procedures
