@@ -82,36 +82,4 @@ export class PseudocodeLanguageService {
         }
     }
 
-    /**
-     * Analyze code context (kept for compatibility, but now just calls Rust)
-     * @deprecated This is now handled by Rust, but kept for API compatibility
-     */
-    analyzeContext(code, line, column) {
-        // This method is kept for backwards compatibility but the actual
-        // context analysis is now done in Rust
-        return {
-            line: line,
-            column: column,
-            // Return minimal context for compatibility
-            isStartOfLine: false,
-            beforeCursor: '',
-            afterCursor: ''
-        };
-    }
-
-    /**
-     * Extract symbols (kept for compatibility, but now just calls Rust)
-     * @deprecated This is now handled by Rust, but kept for API compatibility
-     */
-    extractSymbols(code) {
-        // This method is kept for backwards compatibility but the actual
-        // symbol extraction is now done in Rust
-        return {
-            variables: [],
-            constants: [],
-            functions: [],
-            procedures: [],
-            types: []
-        };
-    }
 }

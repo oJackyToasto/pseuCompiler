@@ -8,6 +8,77 @@ let languageService = null;
 let terminal = null;
 let isExecuting = false;
 
+// Terminal theme constants
+const TERMINAL_THEMES = {
+    dark: {
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+        cursor: '#d4d4d4',
+        selection: 'rgba(255, 255, 255, 0.3)',
+        black: '#000000',
+        red: '#f48771',
+        green: '#89d185',
+        yellow: '#d7ba7d',
+        blue: '#569cd6',
+        magenta: '#c586c0',
+        cyan: '#4ec9b0',
+        white: '#d4d4d4',
+        brightBlack: '#808080',
+        brightRed: '#f48771',
+        brightGreen: '#89d185',
+        brightYellow: '#d7ba7d',
+        brightBlue: '#569cd6',
+        brightMagenta: '#c586c0',
+        brightCyan: '#4ec9b0',
+        brightWhite: '#ffffff'
+    },
+    light: {
+        background: '#ffffff',
+        foreground: '#1e1e1e',
+        cursor: '#1e1e1e',
+        selection: 'rgba(0, 0, 0, 0.3)',
+        black: '#000000',
+        red: '#a31515',
+        green: '#098658',
+        yellow: '#d7ba7d',
+        blue: '#0000ff',
+        magenta: '#811f3f',
+        cyan: '#267f99',
+        white: '#1e1e1e',
+        brightBlack: '#808080',
+        brightRed: '#a31515',
+        brightGreen: '#098658',
+        brightYellow: '#d7ba7d',
+        brightBlue: '#0000ff',
+        brightMagenta: '#811f3f',
+        brightCyan: '#267f99',
+        brightWhite: '#000000'
+    }
+};
+
+// Snippet keywords (used for filtering autocomplete)
+const SNIPPET_KEYWORDS = ['IF', 'WHILE', 'FOR', 'REPEAT', 'CASE', 'FUNCTION', 'PROCEDURE', 'DECLARE'];
+
+// Helper to write to terminal safely
+function termWrite(text, color = null) {
+    if (!terminal) return;
+    if (color) {
+        terminal.writeln(`\x1b[${color}m${text}\x1b[0m`);
+    } else {
+        terminal.writeln(text);
+    }
+}
+
+// Helper to get FitAddon class
+function getFitAddonClass() {
+    if (typeof window.FitAddon === 'undefined') return null;
+    let FitAddonClass = window.FitAddon;
+    if (typeof FitAddonClass === 'object' && typeof FitAddonClass.FitAddon === 'function') {
+        FitAddonClass = FitAddonClass.FitAddon;
+    }
+    return typeof FitAddonClass === 'function' ? FitAddonClass : null;
+}
+
 // Example code
 const examples = {
     bubble_sort: `// Bubble Sort Algorithm
@@ -151,9 +222,10 @@ function initMonaco() {
                 
                 // Control flow statement snippets
                 const controlFlowSnippets = [];
+                const prefixUpper = prefix.toUpperCase();
                 
                 // IF statement snippet
-                if (prefix.length === 0 || 'IF'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'IF'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'IF',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -167,7 +239,7 @@ function initMonaco() {
                 }
                 
                 // WHILE statement snippet
-                if (prefix.length === 0 || 'WHILE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'WHILE'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'WHILE',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -181,7 +253,7 @@ function initMonaco() {
                 }
                 
                 // FOR statement snippet
-                if (prefix.length === 0 || 'FOR'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'FOR'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'FOR',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -195,7 +267,7 @@ function initMonaco() {
                 }
                 
                 // REPEAT-UNTIL statement snippet
-                if (prefix.length === 0 || 'REPEAT'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'REPEAT'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'REPEAT',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -209,7 +281,7 @@ function initMonaco() {
                 }
                 
                 // CASE statement snippet
-                if (prefix.length === 0 || 'CASE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'CASE'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'CASE',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -223,7 +295,7 @@ function initMonaco() {
                 }
                 
                 // FUNCTION snippet
-                if (prefix.length === 0 || 'FUNCTION'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'FUNCTION'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'FUNCTION',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -237,7 +309,7 @@ function initMonaco() {
                 }
                 
                 // PROCEDURE snippet
-                if (prefix.length === 0 || 'PROCEDURE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'PROCEDURE'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'PROCEDURE',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -251,7 +323,7 @@ function initMonaco() {
                 }
                 
                 // DECLARE snippet
-                if (prefix.length === 0 || 'DECLARE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                if (prefix.length === 0 || 'DECLARE'.startsWith(prefixUpper)) {
                     controlFlowSnippets.push({
                         label: 'DECLARE',
                         kind: monaco.languages.CompletionItemKind.Snippet,
@@ -275,26 +347,19 @@ function initMonaco() {
                             prefix
                         );
 
-                        // Keywords that we have snippets for - filter them out from language service suggestions
-                        const snippetKeywords = ['IF', 'WHILE', 'FOR', 'REPEAT', 'CASE', 'FUNCTION', 'PROCEDURE', 'DECLARE'];
-                        
-                        // Convert to Monaco completion items, but filter out keywords we have snippets for
+                        // Convert to Monaco completion items, filtering out snippet keywords
                         languageServiceItems = suggestions
-                            .filter(suggestion => {
-                                // Filter out keywords that we have snippets for
-                                const labelUpper = suggestion.label.toUpperCase();
-                                return !snippetKeywords.includes(labelUpper);
-                            })
-                            .map(suggestion => ({
-                                label: suggestion.label,
-                                kind: mapSuggestionKindToMonaco(suggestion.kind),
-                                detail: suggestion.detail,
-                                documentation: typeof suggestion.documentation === 'string' 
-                                    ? { value: suggestion.documentation }
-                                    : suggestion.documentation,
-                                insertText: suggestion.insertText || suggestion.label,
+                            .filter(s => !SNIPPET_KEYWORDS.includes(s.label.toUpperCase()))
+                            .map(s => ({
+                                label: s.label,
+                                kind: mapSuggestionKindToMonaco(s.kind),
+                                detail: s.detail,
+                                documentation: typeof s.documentation === 'string' 
+                                    ? { value: s.documentation }
+                                    : s.documentation,
+                                insertText: s.insertText || s.label,
                                 range: range,
-                                insertTextRules: suggestion.insertText && suggestion.insertText.endsWith('(')
+                                insertTextRules: s.insertText?.endsWith('(')
                                     ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                                     : undefined
                             }));
@@ -574,64 +639,26 @@ function initTerminal() {
         cursorBlink: true,
         fontSize: 14,
         fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-        scrollback: 10000, // Allow large scrollback buffer
-        theme: {
-            background: '#1e1e1e',
-            foreground: '#d4d4d4',
-            cursor: '#d4d4d4',
-            selection: 'rgba(255, 255, 255, 0.3)',
-            black: '#000000',
-            red: '#f48771',
-            green: '#89d185',
-            yellow: '#d7ba7d',
-            blue: '#569cd6',
-            magenta: '#c586c0',
-            cyan: '#4ec9b0',
-            white: '#d4d4d4',
-            brightBlack: '#808080',
-            brightRed: '#f48771',
-            brightGreen: '#89d185',
-            brightYellow: '#d7ba7d',
-            brightBlue: '#569cd6',
-            brightMagenta: '#c586c0',
-            brightCyan: '#4ec9b0',
-            brightWhite: '#ffffff'
-        }
+        scrollback: 10000,
+        theme: TERMINAL_THEMES.dark
     });
 
-    // Try to use FitAddon if available, otherwise terminal works without it
-    let fitAddon = null;
-    
-    // Check various possible export patterns for FitAddon
-    if (typeof window.FitAddon !== 'undefined') {
-        let FitAddonClass = window.FitAddon;
-        
-        // Try FitAddon.FitAddon pattern (common with script tag loading)
-        if (typeof FitAddonClass === 'object' && typeof FitAddonClass.FitAddon === 'function') {
-            FitAddonClass = FitAddonClass.FitAddon;
-        }
-        
-        // Try direct function
-        if (typeof FitAddonClass === 'function') {
-            try {
-                fitAddon = new FitAddonClass();
-                terminal.loadAddon(fitAddon);
-                // Store reference for later use
-                terminal._fitAddon = fitAddon;
-            } catch (e) {
-                console.warn('Failed to initialize FitAddon, terminal will work without auto-resize:', e);
-                fitAddon = null;
-            }
+    // Initialize FitAddon if available
+    const FitAddonClass = getFitAddonClass();
+    if (FitAddonClass) {
+        try {
+            terminal._fitAddon = new FitAddonClass();
+            terminal.loadAddon(terminal._fitAddon);
+        } catch (e) {
+            console.warn('Failed to initialize FitAddon:', e);
         }
     }
-    
-    // If FitAddon not available, terminal will still work fine
     
     terminal.open(terminalElement);
     
     // Initial fit
-    if (fitAddon) {
-        fitAddon.fit();
+    if (terminal._fitAddon) {
+        terminal._fitAddon.fit();
     }
 
     terminal.writeln('Pseudocode Terminal Ready');
@@ -653,32 +680,6 @@ async function initWasm() {
     }
 }
 
-// Show output in terminal
-function showOutput(text, type = 'info') {
-    if (!terminal) return;
-    
-    // Clear terminal if starting new execution
-    if (type === 'info' && text === 'Running...') {
-        terminal.clear();
-        terminal.writeln('Executing program...\r\n');
-        return;
-    }
-    
-    if (text) {
-        const lines = text.split('\n');
-        lines.forEach((line, index) => {
-            if (line.trim() || index < lines.length - 1) {
-                if (type === 'error') {
-                    terminal.writeln(`\x1b[31m${line}\x1b[0m`);
-                } else if (type === 'success') {
-                    terminal.writeln(line);
-                } else {
-                    terminal.writeln(line);
-                }
-            }
-        });
-    }
-}
 
 // Clear error decorations
 function clearErrorDecorations() {
@@ -775,24 +776,18 @@ function promptInput(promptText) {
 // Run code with interactive terminal input (line-by-line execution)
 async function runCode() {
     if (isExecuting) {
-        if (terminal) {
-            terminal.writeln('\r\n\x1b[31mExecution already in progress...\x1b[0m');
-        }
+        termWrite('\r\nExecution already in progress...', '31');
         return;
     }
     
     if (!engine) {
-        if (terminal) {
-            terminal.writeln('\x1b[31mError: WASM not initialized\x1b[0m');
-        }
+        termWrite('Error: WASM not initialized', '31');
         return;
     }
     
     const code = editor.getValue();
     if (!code.trim()) {
-        if (terminal) {
-            terminal.writeln('\x1b[33mNo code to execute\x1b[0m');
-        }
+        termWrite('No code to execute', '33');
         return;
     }
     
@@ -808,10 +803,10 @@ async function runCode() {
         const parseResult = engine.parse_for_execution(code);
         if (!parseResult || !parseResult.valid) {
             const errors = parseResult?.errors || [];
-            if (terminal && errors.length > 0) {
-                terminal.writeln('\x1b[31mParse errors:\x1b[0m');
+            if (errors.length > 0) {
+                termWrite('Parse errors:', '31');
                 errors.forEach(error => {
-                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
+                    termWrite(`Line ${error.line}: ${error.message}`, '31');
                 });
             }
             highlightErrors(errors);
@@ -822,9 +817,7 @@ async function runCode() {
         while (engine.has_more_statements()) {
             // Check if next statement is INPUT
             const stmtInfo = engine.get_next_statement_info();
-            
             if (stmtInfo.is_input && stmtInfo.input_var_name) {
-                // Prompt for input
                 const inputValue = await promptInput('');
                 engine.clear_inputs();
                 engine.add_input(inputValue);
@@ -835,11 +828,9 @@ async function runCode() {
             
             // Display any output immediately
             if (result.output) {
-                // Split by newlines and write each line properly
                 const lines = result.output.split('\n');
                 for (let i = 0; i < lines.length; i++) {
                     if (i < lines.length - 1 || lines[i].length > 0) {
-                        // Use writeln for lines (handles newlines properly)
                         terminal.writeln(lines[i]);
                     }
                 }
@@ -847,136 +838,35 @@ async function runCode() {
             
             // Check for errors
             if (result.errors && result.errors.length > 0) {
-                terminal.writeln('\r\n\x1b[31m--- Errors ---\x1b[0m');
+                termWrite('\r\n--- Errors ---', '31');
                 result.errors.forEach(error => {
-                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
+                    termWrite(`Line ${error.line}: ${error.message}`, '31');
                 });
                 highlightErrors(result.errors);
-                break; // Stop execution on error
+                break;
             }
         }
         
-        terminal.writeln('\r\n\x1b[32mProgram execution complete.\x1b[0m\r\n');
+        termWrite('\r\nProgram execution complete.\r\n', '32');
     } catch (error) {
-        if (terminal) {
-            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
-        }
+        termWrite(`Error: ${error.message}`, '31');
         console.error('Execution error:', error);
     } finally {
         isExecuting = false;
     }
 }
 
-// Show input modal and collect inputs
-function showInputModal(inputVars, onSubmit) {
-    const modal = document.getElementById('inputModal');
-    const inputFields = document.getElementById('inputFields');
-    const submitBtn = document.getElementById('submitInputsBtn');
-    const cancelBtn = document.getElementById('cancelInputsBtn');
-    
-    // Clear previous inputs
-    inputFields.innerHTML = '';
-    
-    // Create input fields for each variable
-    inputVars.forEach((varName, index) => {
-        const inputField = document.createElement('div');
-        inputField.className = 'input-field';
-        
-        const label = document.createElement('label');
-        label.textContent = `${varName}:`;
-        label.setAttribute('for', `input_${index}`);
-        
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.id = `input_${index}`;
-        input.name = varName;
-        input.placeholder = `Enter value for ${varName}`;
-        
-        // Handle Enter key to submit
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && index === inputVars.length - 1) {
-                submitBtn.click();
-            } else if (e.key === 'Enter') {
-                const nextInput = document.getElementById(`input_${index + 1}`);
-                if (nextInput) nextInput.focus();
-            }
-        });
-        
-        inputField.appendChild(label);
-        inputField.appendChild(input);
-        inputFields.appendChild(inputField);
-    });
-    
-    // Show modal
-    modal.classList.add('show');
-    
-    // Focus first input
-    const firstInput = document.getElementById('input_0');
-    if (firstInput) {
-        setTimeout(() => firstInput.focus(), 100);
-    }
-    
-    // Submit handler
-    let submitHandler;
-    let cancelHandler;
-    
-    submitHandler = () => {
-        const inputs = inputVars.map(varName => {
-            const input = Array.from(inputFields.querySelectorAll('input')).find(
-                inp => inp.name === varName
-            );
-            return input ? input.value : '';
-        });
-        
-        // Clear any previous inputs
-        engine.clear_inputs();
-        
-        // Add all inputs to the queue (in reverse order since queue uses LIFO)
-        // So when INPUT statements execute in order, they pop in the correct order
-        for (let i = inputs.length - 1; i >= 0; i--) {
-            engine.add_input(inputs[i]);
-        }
-        
-        // Hide modal
-        modal.classList.remove('show');
-        
-        // Remove event listeners
-        submitBtn.removeEventListener('click', submitHandler);
-        cancelBtn.removeEventListener('click', cancelHandler);
-        
-        // Execute callback
-        onSubmit();
-    };
-    
-    // Cancel handler
-    cancelHandler = () => {
-        // Hide modal without executing
-        modal.classList.remove('show');
-        
-        // Remove event listeners
-        submitBtn.removeEventListener('click', submitHandler);
-        cancelBtn.removeEventListener('click', cancelHandler);
-    };
-    
-    // Add event listeners
-    submitBtn.addEventListener('click', submitHandler);
-    cancelBtn.addEventListener('click', cancelHandler);
-}
 
 // Check syntax
 async function checkSyntax() {
     if (!engine) {
-        if (terminal) {
-            terminal.writeln('\x1b[31mError: WASM not initialized\x1b[0m');
-        }
+        termWrite('Error: WASM not initialized', '31');
         return;
     }
     
     const code = editor.getValue();
     if (!code.trim()) {
-        if (terminal) {
-            terminal.writeln('\x1b[33mNo code to check\x1b[0m');
-        }
+        termWrite('No code to check', '33');
         return;
     }
     
@@ -984,23 +874,17 @@ async function checkSyntax() {
     
     try {
         const result = engine.check_syntax(code);
-        const checkResult = result;
-        
-        if (terminal) {
-            if (checkResult.valid) {
-                terminal.writeln('\x1b[32mSyntax check passed!\x1b[0m');
-            } else {
-                terminal.writeln('\x1b[31mSyntax errors found:\x1b[0m');
-                checkResult.errors.forEach(error => {
-                    terminal.writeln(`\x1b[31mLine ${error.line}: ${error.message}\x1b[0m`);
-                });
-                highlightErrors(checkResult.errors);
-            }
+        if (result.valid) {
+            termWrite('Syntax check passed!', '32');
+        } else {
+            termWrite('Syntax errors found:', '31');
+            result.errors.forEach(error => {
+                termWrite(`Line ${error.line}: ${error.message}`, '31');
+            });
+            highlightErrors(result.errors);
         }
     } catch (error) {
-        if (terminal) {
-            terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
-        }
+        termWrite(`Error: ${error.message}`, '31');
         console.error('Syntax check error:', error);
     }
 }
@@ -1081,11 +965,8 @@ function handleFileSelect(event) {
     
     // Check file extension
     if (!file.name.endsWith('.pseu')) {
-        if (terminal) {
-            terminal.writeln('\x1b[31mError: Please select a .pseu file\x1b[0m');
-        }
+        termWrite('Error: Please select a .pseu file', '31');
         alert('Please select a .pseu file');
-        // Reset the input
         event.target.value = '';
         return;
     }
@@ -1098,32 +979,22 @@ function handleFileSelect(event) {
             if (editor) {
                 editor.setValue(content);
                 clearErrorDecorations();
-                // Update filename display
                 updateFilename(file.name);
-                // Save to cache
                 localStorage.setItem('editorContent', content);
-                if (terminal) {
-                    terminal.writeln(`\x1b[32mOpened file: ${file.name}\x1b[0m`);
-                }
+                termWrite(`Opened file: ${file.name}`, '32');
             }
         } catch (error) {
             console.error('Error reading file:', error);
-            if (terminal) {
-                terminal.writeln(`\x1b[31mError reading file: ${error.message}\x1b[0m`);
-            }
+            termWrite(`Error reading file: ${error.message}`, '31');
             alert(`Error reading file: ${error.message}`);
         }
-        // Reset the input value to allow selecting the same file again
         event.target.value = '';
     };
     
     reader.onerror = () => {
         console.error('Error reading file');
-        if (terminal) {
-            terminal.writeln('\x1b[31mError reading file\x1b[0m');
-        }
+        termWrite('Error reading file', '31');
         alert('Error reading file');
-        // Reset the input
         event.target.value = '';
     };
     
@@ -1173,20 +1044,13 @@ async function downloadFile() {
             await writable.write(content);
             await writable.close();
             
-            // Update filename display (remove .pseu extension)
             const savedName = fileHandle.name;
             updateFilename(savedName);
-            
-            if (terminal) {
-                terminal.writeln(`\x1b[32mFile saved: ${savedName}\x1b[0m`);
-            }
+            termWrite(`File saved: ${savedName}`, '32');
         } catch (error) {
-            // User cancelled the dialog
             if (error.name !== 'AbortError') {
                 console.error('Error saving file:', error);
-                if (terminal) {
-                    terminal.writeln(`\x1b[31mError saving file: ${error.message}\x1b[0m`);
-                }
+                termWrite(`Error saving file: ${error.message}`, '31');
             }
         }
     } else {
@@ -1200,10 +1064,7 @@ async function downloadFile() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        if (terminal) {
-            terminal.writeln(`\x1b[32mFile download initiated: ${filenameWithExt}\x1b[0m`);
-        }
+        termWrite(`File download initiated: ${filenameWithExt}`, '32');
     }
 }
 
@@ -1212,67 +1073,16 @@ function toggleTheme() {
     const body = document.body;
     const themeBtn = document.getElementById('themeBtn');
     
-    if (body.classList.contains('light')) {
-        body.classList.remove('light');
-        if (editor) {
-            monaco.editor.setTheme('pseudocode-dark');
-        }
-        if (terminal) {
-            terminal.options.theme = {
-                background: '#1e1e1e',
-                foreground: '#d4d4d4',
-                cursor: '#d4d4d4',
-                selection: 'rgba(255, 255, 255, 0.3)',
-                black: '#000000',
-                red: '#f48771',
-                green: '#89d185',
-                yellow: '#d7ba7d',
-                blue: '#569cd6',
-                magenta: '#c586c0',
-                cyan: '#4ec9b0',
-                white: '#d4d4d4',
-                brightBlack: '#808080',
-                brightRed: '#f48771',
-                brightGreen: '#89d185',
-                brightYellow: '#d7ba7d',
-                brightBlue: '#569cd6',
-                brightMagenta: '#c586c0',
-                brightCyan: '#4ec9b0',
-                brightWhite: '#ffffff'
-            };
-        }
-        themeBtn.textContent = 'Dark';
-    } else {
-        body.classList.add('light');
-        if (editor) {
-            monaco.editor.setTheme('pseudocode-light');
-        }
-        if (terminal) {
-            terminal.options.theme = {
-                background: '#ffffff',
-                foreground: '#1e1e1e',
-                cursor: '#1e1e1e',
-                selection: 'rgba(0, 0, 0, 0.3)',
-                black: '#000000',
-                red: '#a31515',
-                green: '#098658',
-                yellow: '#d7ba7d',
-                blue: '#0000ff',
-                magenta: '#811f3f',
-                cyan: '#267f99',
-                white: '#1e1e1e',
-                brightBlack: '#808080',
-                brightRed: '#a31515',
-                brightGreen: '#098658',
-                brightYellow: '#d7ba7d',
-                brightBlue: '#0000ff',
-                brightMagenta: '#811f3f',
-                brightCyan: '#267f99',
-                brightWhite: '#000000'
-            };
-        }
-        themeBtn.textContent = 'Light';
+    const isLight = body.classList.contains('light');
+    body.classList.toggle('light');
+    
+    if (editor) {
+        monaco.editor.setTheme(isLight ? 'pseudocode-dark' : 'pseudocode-light');
     }
+    if (terminal) {
+        terminal.options.theme = isLight ? TERMINAL_THEMES.dark : TERMINAL_THEMES.light;
+    }
+    themeBtn.textContent = isLight ? 'Dark' : 'Light';
 }
 
 // Add CSS for error highlighting
@@ -1292,17 +1102,10 @@ document.head.appendChild(style);
 function resizeTerminal() {
     if (!terminal) return;
     
-    // Try to use FitAddon if available
-    if (typeof window.FitAddon !== 'undefined') {
-        let FitAddonClass = window.FitAddon;
-        
-        // Try FitAddon.FitAddon pattern (common with script tag loading)
-        if (typeof FitAddonClass === 'object' && typeof FitAddonClass.FitAddon === 'function') {
-            FitAddonClass = FitAddonClass.FitAddon;
-        }
-        
-        // Check if terminal already has FitAddon loaded
-        if (!terminal._fitAddon && typeof FitAddonClass === 'function') {
+    // Initialize FitAddon if not already loaded
+    if (!terminal._fitAddon) {
+        const FitAddonClass = getFitAddonClass();
+        if (FitAddonClass) {
             try {
                 terminal._fitAddon = new FitAddonClass();
                 terminal.loadAddon(terminal._fitAddon);
@@ -1310,55 +1113,35 @@ function resizeTerminal() {
                 console.warn('Failed to initialize FitAddon:', e);
             }
         }
-        
-        if (terminal._fitAddon && typeof terminal._fitAddon.fit === 'function') {
-            // Use requestAnimationFrame to ensure DOM has updated before fitting
-            requestAnimationFrame(() => {
-                if (terminal && terminal._fitAddon) {
-                    // Store current scroll position
-                    const scrollPosition = terminal.buffer.active.baseY;
-                    
-                    // Fit the terminal to the container
-                    terminal._fitAddon.fit();
-                    
-                    // After fitting, ensure scrollback is maintained and scrollbar appears if needed
-                    // Force terminal to recalculate its scrollable area
-                    setTimeout(() => {
-                        if (terminal) {
-                            // Refresh the terminal to ensure proper rendering
-                            terminal.refresh(0, terminal.rows - 1);
-                            
-                            // Ensure the viewport can scroll if content exceeds visible area
-                            // The terminal should maintain its scrollback buffer
-                            const viewport = terminal.element?.querySelector('.xterm-viewport');
-                            if (viewport) {
-                                // Force recalculation of scrollable height
-                                viewport.style.overflowY = 'auto';
-                            }
-                        }
-                    }, 50);
-                }
-            });
-            return;
-        }
     }
     
-    // Fallback: manually trigger terminal resize if FitAddon not available
-    // Use requestAnimationFrame to ensure DOM has updated
-    requestAnimationFrame(() => {
-        if (terminal && terminal.resize) {
-            // Get the actual dimensions of the terminal element
-            const terminalElement = terminal.element;
-            if (terminalElement) {
-                const cols = terminal.cols || 80;
-                const lineHeight = parseFloat(getComputedStyle(terminalElement).lineHeight) || 14;
-                const padding = parseFloat(getComputedStyle(terminalElement).paddingTop) + 
-                               parseFloat(getComputedStyle(terminalElement).paddingBottom) || 0;
-                const rows = Math.floor((terminalElement.clientHeight - padding) / lineHeight);
-                if (rows > 0 && cols > 0) {
-                    terminal.resize(cols, rows);
-                }
+    // Use FitAddon if available
+    if (terminal._fitAddon && typeof terminal._fitAddon.fit === 'function') {
+        requestAnimationFrame(() => {
+            if (terminal?._fitAddon) {
+                terminal._fitAddon.fit();
+                setTimeout(() => {
+                    if (terminal) {
+                        terminal.refresh(0, terminal.rows - 1);
+                        const viewport = terminal.element?.querySelector('.xterm-viewport');
+                        if (viewport) viewport.style.overflowY = 'auto';
+                    }
+                }, 50);
             }
+        });
+        return;
+    }
+    
+    // Fallback: manual resize
+    requestAnimationFrame(() => {
+        if (terminal?.resize && terminal.element) {
+            const el = terminal.element;
+            const cols = terminal.cols || 80;
+            const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 14;
+            const padding = (parseFloat(getComputedStyle(el).paddingTop) || 0) + 
+                           (parseFloat(getComputedStyle(el).paddingBottom) || 0);
+            const rows = Math.floor((el.clientHeight - padding) / lineHeight);
+            if (rows > 0 && cols > 0) terminal.resize(cols, rows);
         }
     });
 }
@@ -1482,6 +1265,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runCode);
     }
 });
-
-
-
