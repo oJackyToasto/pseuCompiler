@@ -173,6 +173,43 @@ impl WasmInterpreter {
     pub fn add_input(&mut self, input: String) {
         self.input_queue.push(input);
     }
+    
+    /// Reset interpreter state - clear all variables, functions, procedures, etc.
+    pub fn reset(&mut self) {
+        self.variables.clear();
+        self.variables_type.clear();
+        self.functions.clear();
+        self.procedures.clear();
+        self.type_definitions.clear();
+        self.open_files.clear();
+        // Note: virtual_files is intentionally NOT cleared - it persists across runs
+        self.call_stack.clear();
+        self.context_stack.clear();
+        self.output_buffer.clear();
+        self.input_queue.clear();
+        self.constants.clear();
+    }
+    
+    /// Validate if a variable can be used for INPUT
+    /// Returns None if valid, or Some(error_message) if invalid
+    pub fn validate_input_variable(&self, var_name: &str) -> Option<String> {
+        // Check if variable exists and is declared
+        let var_type = match self.variables_type.get(var_name) {
+            Some(t) => t,
+            None => {
+                // Match the error message format used in INPUT statement execution
+                return Some(format!("Variable {} not found", var_name));
+            }
+        };
+        
+        // Check if type is supported for INPUT
+        match var_type {
+            Type::INTEGER | Type::REAL | Type::STRING | Type::CHAR | Type::BOOLEAN => {
+                None // Supported
+            }
+            _ => Some(format!("Input not supported for type: {:?}", var_type)),
+        }
+    }
 
     /// Push a function/procedure call onto the call stack
     fn push_call(&mut self, name: &str, args: Option<&[Value]>) {
@@ -499,6 +536,12 @@ impl WasmInterpreter {
                     }
                 } else {
                     // Simple variable assignment
+                    // Check if variable is declared
+                    if !self.variables_type.contains_key(name) {
+                        let msg = format!("Variable '{}' must be declared before assignment", name);
+                        eprintln!("Error at line {}: {}", span.line, msg);
+                        return Err(msg);
+                    }
                     self.variables.insert(name.clone(), value);
                     Ok(())
                 }
@@ -512,12 +555,30 @@ impl WasmInterpreter {
                 Ok(())
             }
             Stmt::Input { name, span } => {
-                // Clone the type to avoid holding a reference while mutating
+                // Check if variable exists and is declared
                 let var_type = self.variables_type.get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?
-                    .clone();
+                    .ok_or_else(|| {
+                        let msg = format!("Variable {} not found", name);
+                        eprintln!("Error at line {}: {}", span.line, msg);
+                        msg
+                    })?;
 
-                // Get input from queue, or return error if empty
+                // Validate that the type is supported for INPUT BEFORE prompting
+                match var_type {
+                    Type::INTEGER | Type::REAL | Type::STRING | Type::CHAR | Type::BOOLEAN => {
+                        // Type is supported, continue
+                    }
+                    _ => {
+                        let msg = format!("Input not supported for type: {:?}", var_type);
+                        eprintln!("Error at line {}: {}", span.line, msg);
+                        return Err(msg);
+                    }
+                }
+
+                // Clone the type to avoid holding a reference while mutating
+                let var_type = var_type.clone();
+
+                // Get input from queue, or return error if empty (only after validation)
                 let input = if let Some(input_val) = self.input_queue.pop() {
                     input_val
                 } else {
@@ -553,7 +614,7 @@ impl WasmInterpreter {
                             _ => return Err(format!("Invalid boolean: '{}' (expected true/false)", input)),
                         }
                     }
-                    _ => return Err(format!("Input not supported for type: {:?}", var_type)),
+                    _ => unreachable!(), // Already validated above
                 };
                 self.variables.insert(name.clone(), value);
                 Ok(())

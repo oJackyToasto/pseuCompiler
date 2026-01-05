@@ -498,6 +498,12 @@ impl Interpreter {
                     }
                 } else {
                     // Simple variable assignment
+                    // Check if variable is declared
+                    if !self.variables_type.contains_key(name) {
+                        let msg = format!("Variable '{}' must be declared before assignment", name);
+                        log_error!(msg, span.line);
+                        return Err(msg);
+                    }
                     self.variables.insert(name.clone(), value);
                     Ok(())
                 }
@@ -510,10 +516,28 @@ impl Interpreter {
                 println!();
                 Ok(())
             }
-            Stmt::Input { name, span: _ } => {
+            Stmt::Input { name, span } => {
+                // Check if variable exists and is declared
                 let var_type = self.variables_type.get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
+                    .ok_or_else(|| {
+                        let msg = format!("Variable {} not found", name);
+                        log_error!(msg, span.line);
+                        msg
+                    })?;
 
+                // Validate that the type is supported for INPUT BEFORE prompting
+                match var_type {
+                    Type::INTEGER | Type::REAL | Type::STRING | Type::CHAR | Type::BOOLEAN => {
+                        // Type is supported, continue
+                    }
+                    _ => {
+                        let msg = format!("Input not supported for type: {:?}", var_type);
+                        log_error!(msg, span.line);
+                        return Err(msg);
+                    }
+                }
+
+                // Now prompt for input (after validation)
                 let mut input = String::new();
                 std::io::stdin()
                     .read_line(&mut input)
@@ -545,7 +569,7 @@ impl Interpreter {
                             _ => return Err(format!("Invalid boolean: '{}' (expected true/false)", input)),
                         }
                     }
-                    _ => return Err(format!("Input not supported for type: {:?}", var_type)),
+                    _ => unreachable!(), // Already validated above
                 };
                 self.variables.insert(name.clone(), value);
                 Ok(())

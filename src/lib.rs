@@ -84,8 +84,9 @@ impl PseudocodeEngine {
     /// Parse code and prepare for step-by-step execution
     #[wasm_bindgen]
     pub fn parse_for_execution(&mut self, code: &str) -> JsValue {
+        // Reset interpreter state (clear variables, functions, etc.)
+        self.interpreter.reset();
         // Clear previous state
-        self.interpreter.clear_output();
         self.parsed_statements.clear();
         self.current_statement_index = 0;
         
@@ -137,6 +138,14 @@ impl PseudocodeEngine {
             input_var_name,
             line,
         }).unwrap()
+    }
+    
+    /// Validate if a variable can be used for INPUT (before prompting)
+    /// Returns empty string if valid, or error message if invalid
+    #[wasm_bindgen]
+    pub fn validate_input_variable(&self, var_name: &str) -> String {
+        self.interpreter.validate_input_variable(var_name)
+            .unwrap_or_else(|| String::new())
     }
 
     /// Execute the next statement and return output since last call
@@ -191,8 +200,8 @@ impl PseudocodeEngine {
     /// Execute pseudocode and return results
     #[wasm_bindgen]
     pub fn execute(&mut self, code: &str) -> JsValue {
-        // Clear previous output
-        self.interpreter.clear_output();
+        // Reset interpreter state (clear variables, functions, etc.)
+        self.interpreter.reset();
         
         // Parse the code
         let mut parser = Parser::new(code);

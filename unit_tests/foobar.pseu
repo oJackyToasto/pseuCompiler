@@ -44,3 +44,4 @@ IF foo = 42 THEN
 ENDIF
 
 OUTPUT "Test complete!"
+

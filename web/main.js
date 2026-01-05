@@ -267,6 +267,7 @@ function initMonaco() {
             },
             suggestOnTriggerCharacters: true,
             acceptSuggestionOnCommitCharacter: true,
+            acceptSuggestionOnEnter: 'off',  // Disable Enter key from accepting autocomplete
             tabCompletion: 'on',
             wordBasedSuggestions: false,  // Disable built-in word-based suggestions
             wordBasedSuggestionsOnlySameLanguage: false,  // Don't use words from other files
@@ -563,7 +564,22 @@ async function runCode() {
             const stmtInfo = engine.get_next_statement_info();
             
             if (stmtInfo.is_input && stmtInfo.input_var_name) {
-                // Pause and get input (no prompt text - true terminal style)
+                // Validate INPUT variable BEFORE prompting
+                const validationError = engine.validate_input_variable(stmtInfo.input_var_name);
+                // Check if validation failed (non-empty error message)
+                if (validationError && validationError.length > 0) {
+                    // Validation failed - show error and stop execution
+                    terminal.writeln('\r\n\x1b[31m--- Errors ---\x1b[0m');
+                    terminal.writeln(`\x1b[31mLine ${stmtInfo.line}: ${validationError}\x1b[0m`);
+                    highlightErrors([{
+                        line: stmtInfo.line,
+                        message: validationError,
+                        column: 1
+                    }]);
+                    break; // Stop execution on validation error - DO NOT PROMPT
+                }
+                
+                // Validation passed - now prompt for input
                 const inputValue = await promptInput('');
                 engine.clear_inputs();
                 engine.add_input(inputValue);
