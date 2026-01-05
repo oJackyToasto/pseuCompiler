@@ -64,6 +64,29 @@ function initMonaco() {
         // Register pseudocode language
         monaco.languages.register({ id: 'pseudocode' });
         
+        // Configure language for auto-closing brackets and quotes
+        monaco.languages.setLanguageConfiguration('pseudocode', {
+            brackets: [
+                ['(', ')'],
+                ['[', ']'],
+                ['{', '}']
+            ],
+            autoClosingPairs: [
+                { open: '(', close: ')' },
+                { open: '[', close: ']' },
+                { open: '{', close: '}' },
+                { open: '"', close: '"' },
+                { open: "'", close: "'" }
+            ],
+            surroundingPairs: [
+                { open: '(', close: ')' },
+                { open: '[', close: ']' },
+                { open: '{', close: '}' },
+                { open: '"', close: '"' },
+                { open: "'", close: "'" }
+            ]
+        });
+        
         // Register completion item provider for autocomplete
         monaco.languages.registerCompletionItemProvider('pseudocode', {
             provideCompletionItems: (model, position, context) => {
@@ -453,7 +476,11 @@ function initMonaco() {
                 showSnippets: true,  // Enable snippets for control flow statements
                 showWords: false  // Explicitly disable word-based suggestions
             },
-            quickSuggestionsDelay: 10  // Lower delay for faster autocomplete
+            quickSuggestionsDelay: 10,  // Lower delay for faster autocomplete
+            // Auto-closing brackets and quotes
+            autoClosingBrackets: 'languageDefined',  // Auto-close brackets: (), [], {}
+            autoClosingQuotes: 'languageDefined',  // Auto-close quotes: "", ''
+            autoSurround: 'languageDefined'  // Auto-surround selection with brackets/quotes
         });
         
         // Add Enter key handler for auto-indentation after THEN, DO, etc.
