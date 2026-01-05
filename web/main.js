@@ -67,10 +67,52 @@ function initMonaco() {
         // Register completion item provider for autocomplete
         monaco.languages.registerCompletionItemProvider('pseudocode', {
             provideCompletionItems: (model, position, context) => {
-                if (!languageService) {
-                    return { suggestions: [] };
+                // Don't show snippets when space is pressed
+                if (context.triggerCharacter === ' ') {
+                    // Return only language service suggestions, no snippets
+                    const word = model.getWordUntilPosition(position);
+                    const range = {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: word.startColumn,
+                        endColumn: word.endColumn
+                    };
+                    const code = model.getValue();
+                    const prefix = word.word;
+                    
+                    let languageServiceItems = [];
+                    if (languageService) {
+                        try {
+                            const suggestions = languageService.getSuggestions(
+                                code,
+                                position.lineNumber,
+                                position.column,
+                                prefix
+                            );
+                            languageServiceItems = suggestions.map(suggestion => ({
+                                label: suggestion.label,
+                                kind: mapSuggestionKindToMonaco(suggestion.kind),
+                                detail: suggestion.detail,
+                                documentation: typeof suggestion.documentation === 'string' 
+                                    ? { value: suggestion.documentation }
+                                    : suggestion.documentation,
+                                insertText: suggestion.insertText || suggestion.label,
+                                range: range,
+                                insertTextRules: suggestion.insertText && suggestion.insertText.endsWith('(')
+                                    ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                                    : undefined
+                            }));
+                        } catch (error) {
+                            console.error('Error getting language service suggestions:', error);
+                        }
+                    }
+                    
+                    return { 
+                        suggestions: languageServiceItems,
+                        incomplete: false
+                    };
                 }
-
+                
                 const word = model.getWordUntilPosition(position);
                 const range = {
                     startLineNumber: position.lineNumber,
@@ -81,37 +123,172 @@ function initMonaco() {
 
                 const code = model.getValue();
                 const prefix = word.word;
+                const lineText = model.getLineContent(position.lineNumber);
+                const beforeCursor = lineText.substring(0, position.column - 1);
                 
-                // Always try to get suggestions - let the language service decide what to return
-                // (This ensures autocomplete works even on the first character typed)
-                const suggestions = languageService.getSuggestions(
-                    code,
-                    position.lineNumber,
-                    position.column,
-                    prefix
-                );
+                // Control flow statement snippets
+                const controlFlowSnippets = [];
+                
+                // IF statement snippet
+                if (prefix.length === 0 || 'IF'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'IF',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'IF statement (snippet)',
+                        documentation: 'IF condition THEN ... ENDIF',
+                        insertText: 'IF ${1:condition} THEN\n    ${0:statement}\nENDIF',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0' // Sort before other suggestions
+                    });
+                }
+                
+                // WHILE statement snippet
+                if (prefix.length === 0 || 'WHILE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'WHILE',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'WHILE loop (snippet)',
+                        documentation: 'WHILE condition DO ... ENDWHILE',
+                        insertText: 'WHILE ${1:condition} DO\n    ${0:statement}\nENDWHILE',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // FOR statement snippet
+                if (prefix.length === 0 || 'FOR'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'FOR',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'FOR loop (snippet)',
+                        documentation: 'FOR variable <- start TO end ... NEXT variable',
+                        insertText: 'FOR ${1:variable} <- ${2:start} TO ${3:end}\n    ${0:statement}\nNEXT ${1:variable}',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // REPEAT-UNTIL statement snippet
+                if (prefix.length === 0 || 'REPEAT'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'REPEAT',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'REPEAT-UNTIL loop (snippet)',
+                        documentation: 'REPEAT ... UNTIL condition',
+                        insertText: 'REPEAT\n    ${0:statement}\nUNTIL ${1:condition}',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // CASE statement snippet
+                if (prefix.length === 0 || 'CASE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'CASE',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'CASE statement (snippet)',
+                        documentation: 'CASE expression OF ... ENDCASE',
+                        insertText: 'CASE ${1:expression} OF\n    ${2:value} : ${3:statement}\n    OTHERWISE : ${4:statement}\nENDCASE',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // FUNCTION snippet
+                if (prefix.length === 0 || 'FUNCTION'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'FUNCTION',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'FUNCTION declaration (snippet)',
+                        documentation: 'FUNCTION name(params) RETURNS type ... ENDFUNCTION',
+                        insertText: 'FUNCTION ${1:name}(${2:param}) RETURNS ${3:TYPE}\n    ${0:statement}\nENDFUNCTION',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // PROCEDURE snippet
+                if (prefix.length === 0 || 'PROCEDURE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'PROCEDURE',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'PROCEDURE declaration (snippet)',
+                        documentation: 'PROCEDURE name(params) ... ENDPROCEDURE',
+                        insertText: 'PROCEDURE ${1:name}(${2:param})\n    ${0:statement}\nENDPROCEDURE',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // DECLARE snippet
+                if (prefix.length === 0 || 'DECLARE'.toUpperCase().startsWith(prefix.toUpperCase())) {
+                    controlFlowSnippets.push({
+                        label: 'DECLARE',
+                        kind: monaco.languages.CompletionItemKind.Snippet,
+                        detail: 'DECLARE variable (snippet)',
+                        documentation: 'DECLARE variable : TYPE',
+                        insertText: 'DECLARE ${1:variable} : ${2:TYPE}',
+                        range: range,
+                        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                        sortText: '0'
+                    });
+                }
+                
+                // Get language service suggestions
+                let languageServiceItems = [];
+                if (languageService) {
+                    try {
+                        const suggestions = languageService.getSuggestions(
+                            code,
+                            position.lineNumber,
+                            position.column,
+                            prefix
+                        );
 
-                // Convert to Monaco completion items
-                const items = suggestions.map(suggestion => ({
-                    label: suggestion.label,
-                    kind: mapSuggestionKindToMonaco(suggestion.kind),
-                    detail: suggestion.detail,
-                    documentation: typeof suggestion.documentation === 'string' 
-                        ? { value: suggestion.documentation }
-                        : suggestion.documentation,
-                    insertText: suggestion.insertText || suggestion.label,
-                    range: range,
-                    insertTextRules: suggestion.insertText && suggestion.insertText.endsWith('(')
-                        ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-                        : undefined
-                }));
+                        // Keywords that we have snippets for - filter them out from language service suggestions
+                        const snippetKeywords = ['IF', 'WHILE', 'FOR', 'REPEAT', 'CASE', 'FUNCTION', 'PROCEDURE', 'DECLARE'];
+                        
+                        // Convert to Monaco completion items, but filter out keywords we have snippets for
+                        languageServiceItems = suggestions
+                            .filter(suggestion => {
+                                // Filter out keywords that we have snippets for
+                                const labelUpper = suggestion.label.toUpperCase();
+                                return !snippetKeywords.includes(labelUpper);
+                            })
+                            .map(suggestion => ({
+                                label: suggestion.label,
+                                kind: mapSuggestionKindToMonaco(suggestion.kind),
+                                detail: suggestion.detail,
+                                documentation: typeof suggestion.documentation === 'string' 
+                                    ? { value: suggestion.documentation }
+                                    : suggestion.documentation,
+                                insertText: suggestion.insertText || suggestion.label,
+                                range: range,
+                                insertTextRules: suggestion.insertText && suggestion.insertText.endsWith('(')
+                                    ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                                    : undefined
+                            }));
+                    } catch (error) {
+                        console.error('Error getting language service suggestions:', error);
+                    }
+                }
+                
+                // Combine snippets (first, so they appear at top) and language service suggestions
+                const allSuggestions = [...controlFlowSnippets, ...languageServiceItems];
 
                 return { 
-                    suggestions: items,
-                    incomplete: false  // Tell Monaco we've provided all suggestions
+                    suggestions: allSuggestions,
+                    incomplete: false
                 };
             },
-            triggerCharacters: [' ', ':', '(', '<']
+            triggerCharacters: [':', '(', '<']  // Removed space to prevent triggering on space
         });
 
         // Helper to map our suggestion kinds to Monaco kinds
@@ -273,10 +450,66 @@ function initMonaco() {
             wordBasedSuggestionsOnlySameLanguage: false,  // Don't use words from other files
             suggest: {
                 showKeywords: true,
-                showSnippets: false,
+                showSnippets: true,  // Enable snippets for control flow statements
                 showWords: false  // Explicitly disable word-based suggestions
             },
             quickSuggestionsDelay: 10  // Lower delay for faster autocomplete
+        });
+        
+        // Add Enter key handler for auto-indentation after THEN, DO, etc.
+        editor.addCommand(monaco.KeyCode.Enter, function() {
+            const position = editor.getPosition();
+            if (!position) {
+                return; // Fall through to default behavior
+            }
+            
+            const model = editor.getModel();
+            if (!model) {
+                return;
+            }
+            
+            const lineNumber = position.lineNumber;
+            const lineText = model.getLineContent(lineNumber);
+            const beforeCursor = lineText.substring(0, position.column - 1);
+            
+            // Keywords that should trigger auto-indent on next line
+            const indentTriggerKeywords = ['THEN', 'DO', 'ELSE'];
+            
+            // Check if line ends with one of the trigger keywords (case-insensitive)
+            const shouldIndent = indentTriggerKeywords.some(keyword => {
+                const trimmed = beforeCursor.trim();
+                const regex = new RegExp(`\\b${keyword}\\s*$`, 'i');
+                return regex.test(trimmed);
+            });
+            
+            if (shouldIndent) {
+                // Get current indentation
+                const indentMatch = lineText.match(/^(\s*)/);
+                const currentIndent = indentMatch ? indentMatch[1] : '';
+                const newIndent = currentIndent + '    '; // 4 spaces
+                
+                // Insert newline with indentation
+                editor.executeEdits('auto-indent', [{
+                    range: new monaco.Range(lineNumber, position.column, lineNumber, position.column),
+                    text: '\n' + newIndent
+                }]);
+                
+                // Move cursor to the indented position
+                editor.setPosition(new monaco.Position(lineNumber + 1, newIndent.length + 1));
+            } else {
+                // Normal Enter behavior - preserve current line indentation
+                const indentMatch = lineText.match(/^(\s*)/);
+                const currentIndent = indentMatch ? indentMatch[1] : '';
+                
+                // Insert newline with preserved indentation
+                editor.executeEdits('enter', [{
+                    range: new monaco.Range(lineNumber, position.column, lineNumber, position.column),
+                    text: '\n' + currentIndent
+                }]);
+                
+                // Move cursor after the indentation
+                editor.setPosition(new monaco.Position(lineNumber + 1, currentIndent.length + 1));
+            }
         });
         
         // Save editor content to cache on change (debounced)
