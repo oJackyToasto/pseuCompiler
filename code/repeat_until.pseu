@@ -1,0 +1,52 @@
+// REPEAT-UNTIL Loop Example
+// Demonstrates: REPEAT-UNTIL, input validation, loop control
+
+DECLARE number : INTEGER
+DECLARE validInput : BOOLEAN
+
+OUTPUT "Number Guessing Game"
+OUTPUT "I'm thinking of a number between 1 and 100"
+OUTPUT ""
+
+// REPEAT-UNTIL loop for input validation
+validInput <- FALSE
+REPEAT
+    OUTPUT "Enter a number between 1 and 100: "
+    INPUT number
+    
+    IF number >= 1 AND number <= 100 THEN
+        validInput <- TRUE
+        OUTPUT "Valid number entered: ", number
+    ELSE
+        OUTPUT "Invalid! Number must be between 1 and 100."
+    ENDIF
+UNTIL validInput
+
+// Another example: Countdown timer
+DECLARE countdown : INTEGER
+countdown <- 5
+
+OUTPUT ""
+OUTPUT "Countdown:"
+REPEAT
+    OUTPUT countdown
+    countdown <- countdown - 1
+UNTIL countdown < 0
+
+OUTPUT "Blast off!"
+
+// Example: Sum numbers until threshold
+DECLARE sum <- 0: INTEGER
+DECLARE value : INTEGER
+
+OUTPUT ""
+OUTPUT "Enter numbers to sum (enter 0 to stop):"
+REPEAT
+    INPUT value
+    sum <- sum + value
+    OUTPUT "Current sum: ", sum
+UNTIL value = 0
+
+OUTPUT "Final sum: ", sum
+
+

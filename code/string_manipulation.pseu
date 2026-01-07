@@ -1,0 +1,45 @@
+// String Manipulation Examples
+// Demonstrates: LENGTH, UPPER, LOWER, LEFT, RIGHT, SUBSTRING, MID
+
+DECLARE text <- "Hello, Pseudocode World!": STRING
+DECLARE len : INTEGER
+DECLARE upperText : STRING
+DECLARE lowerText : STRING
+DECLARE leftPart : STRING
+DECLARE rightPart : STRING
+DECLARE middlePart : STRING
+
+OUTPUT "Original text: ", text
+
+// Get string length
+len <- LENGTH(text)
+OUTPUT "Length: ", len
+
+// Convert to uppercase
+upperText <- UPPER(text)
+OUTPUT "Uppercase: ", upperText
+
+// Convert to lowercase
+lowerText <- LOWER(text)
+OUTPUT "Lowercase: ", lowerText
+
+// Extract left part (first 5 characters)
+leftPart <- LEFT(text, 5)
+OUTPUT "Left 5 chars: ", leftPart
+
+// Extract right part (last 6 characters)
+rightPart <- RIGHT(text, 6)
+OUTPUT "Right 6 chars: ", rightPart
+
+// Extract middle part using SUBSTRING
+middlePart <- SUBSTRING(text, 8, 10)
+OUTPUT "Substring from position 8, length 10: ", middlePart
+
+// Extract middle part using MID
+middlePart <- MID(text, 8, 10)
+OUTPUT "MID from position 8, length 10: ", middlePart
+
+OUTPUT ""
+OUTPUT "String manipulation complete!"
+
+

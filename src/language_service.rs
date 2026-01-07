@@ -267,7 +267,7 @@ pub const KEYWORDS: &[&str] = &[
     "GETRECORD", "PUTRECORD",
     "INTEGER", "REAL", "STRING", "CHAR", "BOOLEAN", "ARRAY", "OF",
     "AND", "OR", "NOT", "TRUE", "FALSE",
-    "TYPE", "ENDTYPE", "CASE", "ENDCASE", "OTHERWISE", "BREAK",
+    "TYPE", "ENDTYPE", "CASE", "ENDCASE", "OTHERWISE",
     "RETURNS"
 ];
 

@@ -12,13 +12,16 @@ FUNCTION FindRemainder(Input)
         SingleChar <- SUBSTRING(counter, 1)
 
         //Searching the array for the single character
-        FOR alphacounter <- 1 TO 26
-            IF Alphabet[alphacounter] = SingleChar DO
+        DECLARE found <- FALSE: BOOLEAN
+        DECLARE alphacounter : INTEGER
+        alphacounter <- 1
+        WHILE alphacounter <= 26 AND NOT found DO
+            IF Alphabet[alphacounter] = SingleChar THEN
                 Sum <- Sum + alphacounter
-                //Early break
-                BREAK
+                found <- TRUE
             ENDIF
-        NEXT alphacounter
+            alphacounter <- alphacounter + 1
+        ENDWHILE
         
     NEXT counter
     //Returning remainder 

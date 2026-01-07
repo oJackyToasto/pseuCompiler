@@ -123,7 +123,379 @@ DECLARE x <- 5: INTEGER
 DECLARE y <- 10: INTEGER
 DECLARE sum: INTEGER
 sum <- x + y
-OUTPUT "Sum of ", x, " and ", y, " is ", sum`
+OUTPUT "Sum of ", x, " and ", y, " is ", sum`,
+    string_manipulation: `// String Manipulation Examples
+// Demonstrates: LENGTH, UPPER, LOWER, LEFT, RIGHT, SUBSTRING, MID
+
+DECLARE text <- "Hello, Pseudocode World!": STRING
+DECLARE len : INTEGER
+DECLARE upperText : STRING
+DECLARE lowerText : STRING
+DECLARE leftPart : STRING
+DECLARE rightPart : STRING
+DECLARE middlePart : STRING
+
+OUTPUT "Original text: ", text
+
+// Get string length
+len <- LENGTH(text)
+OUTPUT "Length: ", len
+
+// Convert to uppercase
+upperText <- UPPER(text)
+OUTPUT "Uppercase: ", upperText
+
+// Convert to lowercase
+lowerText <- LOWER(text)
+OUTPUT "Lowercase: ", lowerText
+
+// Extract left part (first 5 characters)
+leftPart <- LEFT(text, 5)
+OUTPUT "Left 5 chars: ", leftPart
+
+// Extract right part (last 6 characters)
+rightPart <- RIGHT(text, 6)
+OUTPUT "Right 6 chars: ", rightPart
+
+// Extract middle part using SUBSTRING
+middlePart <- SUBSTRING(text, 8, 10)
+OUTPUT "Substring from position 8, length 10: ", middlePart
+
+// Extract middle part using MID
+middlePart <- MID(text, 8, 10)
+OUTPUT "MID from position 8, length 10: ", middlePart
+
+OUTPUT ""
+OUTPUT "String manipulation complete!"`,
+    case_statement: `// CASE Statement Example
+// Demonstrates: CASE, OTHERWISE, multiple value matching
+
+DECLARE grade <- 85: INTEGER
+DECLARE message : STRING
+
+OUTPUT "Grade Calculator"
+OUTPUT "Grade entered: ", grade
+
+CASE grade OF
+    90 TO 100 : 
+        message <- "Excellent! Grade A"
+    80 TO 89 : 
+        message <- "Good! Grade B"
+    70 TO 79 : 
+        message <- "Average! Grade C"
+    60 TO 69 : 
+        message <- "Below Average! Grade D"
+    0 TO 59 : 
+        message <- "Fail! Grade F"
+    OTHERWISE : 
+        message <- "Invalid grade entered"
+ENDCASE
+
+OUTPUT message
+
+// Another example with character matching
+DECLARE choice <- "B": STRING
+OUTPUT ""
+OUTPUT "Menu System"
+OUTPUT "Choice entered: ", choice
+
+CASE UPPER(choice) OF
+    "A" : 
+        OUTPUT "Option A selected"
+    "B" : 
+        OUTPUT "Option B selected"
+    "C" : 
+        OUTPUT "Option C selected"
+    "Q" : 
+        OUTPUT "Quitting..."
+    OTHERWISE : 
+        OUTPUT "Invalid choice"
+ENDCASE`,
+    repeat_until: `// REPEAT-UNTIL Loop Example
+// Demonstrates: REPEAT-UNTIL, input validation, loop control
+
+DECLARE number <- 42: INTEGER
+DECLARE validInput : BOOLEAN
+
+OUTPUT "Number Guessing Game"
+OUTPUT "I'm thinking of a number between 1 and 100"
+OUTPUT ""
+
+// REPEAT-UNTIL loop for input validation
+validInput <- FALSE
+REPEAT
+    OUTPUT "Enter a number between 1 and 100: ", number
+    
+    IF number >= 1 AND number <= 100 THEN
+        validInput <- TRUE
+        OUTPUT "Valid number entered: ", number
+    ELSE
+        OUTPUT "Invalid! Number must be between 1 and 100."
+    ENDIF
+UNTIL validInput
+
+// Another example: Countdown timer
+DECLARE countdown : INTEGER
+countdown <- 5
+
+OUTPUT ""
+OUTPUT "Countdown:"
+REPEAT
+    OUTPUT countdown
+    countdown <- countdown - 1
+UNTIL countdown < 0
+
+OUTPUT "Blast off!"`,
+    procedure_example: `// PROCEDURE Example
+// Demonstrates: PROCEDURE, ENDPROCEDURE, procedures without return values
+
+DECLARE num1 <- 10: INTEGER
+DECLARE num2 <- 5: INTEGER
+
+// Procedure to display a greeting
+PROCEDURE DisplayGreeting(name : STRING)
+    OUTPUT "Hello, ", name, "!"
+    OUTPUT "Welcome to Pseudocode!"
+ENDPROCEDURE
+
+// Procedure to swap two numbers
+PROCEDURE SwapNumbers(VAR a : INTEGER, VAR b : INTEGER)
+    DECLARE temp : INTEGER
+    temp <- a
+    a <- b
+    b <- temp
+ENDPROCEDURE
+
+// Procedure to display calculation results
+PROCEDURE DisplayCalculation(x : INTEGER, y : INTEGER, operation : STRING)
+    DECLARE result : INTEGER
+    
+    IF operation = "add" THEN
+        result <- x + y
+        OUTPUT x, " + ", y, " = ", result
+    ELSE IF operation = "subtract" THEN
+        result <- x - y
+        OUTPUT x, " - ", y, " = ", result
+    ELSE IF operation = "multiply" THEN
+        result <- x * y
+        OUTPUT x, " * ", y, " = ", result
+    ELSE
+        OUTPUT "Unknown operation"
+    ENDIF
+ENDPROCEDURE
+
+// Main program
+OUTPUT "=== Procedure Examples ==="
+OUTPUT ""
+
+// Call greeting procedure
+CALL DisplayGreeting("Alice")
+
+OUTPUT ""
+OUTPUT "Before swap:"
+OUTPUT "num1 = ", num1
+OUTPUT "num2 = ", num2
+
+// Call swap procedure
+CALL SwapNumbers(num1, num2)
+
+OUTPUT ""
+OUTPUT "After swap:"
+OUTPUT "num1 = ", num1
+OUTPUT "num2 = ", num2
+
+OUTPUT ""
+OUTPUT "Calculations:"
+CALL DisplayCalculation(15, 3, "add")
+CALL DisplayCalculation(15, 3, "subtract")
+CALL DisplayCalculation(15, 3, "multiply")`,
+    character_functions: `// Character Functions Example
+// Demonstrates: ASC, CHR, character code conversion
+
+DECLARE char : STRING
+DECLARE asciiCode : INTEGER
+DECLARE convertedChar : STRING
+
+OUTPUT "Character Code Conversion"
+OUTPUT ""
+
+// Convert character to ASCII code
+char <- "A"
+asciiCode <- ASC(char)
+OUTPUT "Character '", char, "' has ASCII code: ", asciiCode
+
+char <- "a"
+asciiCode <- ASC(char)
+OUTPUT "Character '", char, "' has ASCII code: ", asciiCode
+
+char <- "5"
+asciiCode <- ASC(char)
+OUTPUT "Character '", char, "' has ASCII code: ", asciiCode
+
+OUTPUT ""
+
+// Convert ASCII code to character
+asciiCode <- 65
+convertedChar <- CHR(asciiCode)
+OUTPUT "ASCII code ", asciiCode, " is character: '", convertedChar, "'"
+
+asciiCode <- 97
+convertedChar <- CHR(asciiCode)
+OUTPUT "ASCII code ", asciiCode, " is character: '", convertedChar, "'"
+
+asciiCode <- 48
+convertedChar <- CHR(asciiCode)
+OUTPUT "ASCII code ", asciiCode, " is character: '", convertedChar, "'"
+
+OUTPUT ""
+
+// Example: Convert string to ASCII codes
+DECLARE text <- "Hi": STRING
+DECLARE i : INTEGER
+DECLARE currentChar : STRING
+
+OUTPUT "Converting '", text, "' to ASCII codes:"
+FOR i <- 1 TO LENGTH(text)
+    currentChar <- SUBSTRING(text, i, 1)
+    asciiCode <- ASC(currentChar)
+    OUTPUT "  '", currentChar, "' = ", asciiCode
+NEXT i
+
+OUTPUT ""
+
+// Example: Build string from ASCII codes
+OUTPUT "Building string from ASCII codes:"
+DECLARE codes : ARRAY[1:5] OF INTEGER
+codes[1] <- 72
+codes[2] <- 101
+codes[3] <- 108
+codes[4] <- 108
+codes[5] <- 111
+
+DECLARE builtString <- "": STRING
+FOR i <- 1 TO 5
+    builtString <- builtString + CHR(codes[i])
+NEXT i
+
+OUTPUT "Result: '", builtString, "'"`,
+    array_operations: `// Advanced Array Operations Example
+// Demonstrates: 2D arrays, array manipulation, searching, finding max/min
+
+DECLARE matrix : ARRAY[1:3, 1:3] OF INTEGER
+DECLARE i : INTEGER
+DECLARE j : INTEGER
+DECLARE rowSum : INTEGER
+DECLARE colSum : INTEGER
+DECLARE totalSum <- 0: INTEGER
+
+// Initialize 2D array
+OUTPUT "Initializing 3x3 matrix:"
+FOR i <- 1 TO 3
+    FOR j <- 1 TO 3
+        matrix[i, j] <- (i - 1) * 3 + j
+        OUTPUT matrix[i, j], " "
+    NEXT j
+    OUTPUT ""
+NEXT i
+
+OUTPUT ""
+
+// Calculate row sums
+OUTPUT "Row sums:"
+FOR i <- 1 TO 3
+    rowSum <- 0
+    FOR j <- 1 TO 3
+        rowSum <- rowSum + matrix[i, j]
+    NEXT j
+    OUTPUT "Row ", i, " sum: ", rowSum
+    totalSum <- totalSum + rowSum
+NEXT i
+
+OUTPUT ""
+
+// Calculate column sums
+OUTPUT "Column sums:"
+FOR j <- 1 TO 3
+    colSum <- 0
+    FOR i <- 1 TO 3
+        colSum <- colSum + matrix[i, j]
+    NEXT i
+    OUTPUT "Column ", j, " sum: ", colSum
+NEXT j
+
+OUTPUT ""
+OUTPUT "Total sum: ", totalSum
+
+// Find maximum value in array
+DECLARE maxValue : INTEGER
+DECLARE maxRow : INTEGER
+DECLARE maxCol : INTEGER
+
+maxValue <- matrix[1, 1]
+maxRow <- 1
+maxCol <- 1
+
+FOR i <- 1 TO 3
+    FOR j <- 1 TO 3
+        IF matrix[i, j] > maxValue THEN
+            maxValue <- matrix[i, j]
+            maxRow <- i
+            maxCol <- j
+        ENDIF
+    NEXT j
+NEXT i
+
+OUTPUT ""
+OUTPUT "Maximum value: ", maxValue, " at position [", maxRow, ", ", maxCol, "]"
+
+// Find minimum value in array
+DECLARE minValue : INTEGER
+DECLARE minRow : INTEGER
+DECLARE minCol : INTEGER
+
+minValue <- matrix[1, 1]
+minRow <- 1
+minCol <- 1
+
+FOR i <- 1 TO 3
+    FOR j <- 1 TO 3
+        IF matrix[i, j] < minValue THEN
+            minValue <- matrix[i, j]
+            minRow <- i
+            minCol <- j
+        ENDIF
+    NEXT j
+NEXT i
+
+OUTPUT "Minimum value: ", minValue, " at position [", minRow, ", ", minCol, "]"
+
+// Search for a specific value
+DECLARE searchValue <- 5: INTEGER
+DECLARE found <- FALSE: BOOLEAN
+DECLARE foundRow : INTEGER
+DECLARE foundCol : INTEGER
+
+OUTPUT ""
+OUTPUT "Searching for value: ", searchValue
+i <- 1
+WHILE i <= 3 AND NOT found DO
+    j <- 1
+    WHILE j <= 3 AND NOT found DO
+        IF matrix[i, j] = searchValue THEN
+            found <- TRUE
+            foundRow <- i
+            foundCol <- j
+        ENDIF
+        j <- j + 1
+    ENDWHILE
+    i <- i + 1
+ENDWHILE
+
+IF found THEN
+    OUTPUT "Value found at position [", foundRow, ", ", foundCol, "]"
+ELSE
+    OUTPUT "Value not found in matrix"
+ENDIF`
 };
 
 // Initialize Monaco Editor
@@ -434,7 +806,7 @@ function initMonaco() {
                 'GETRECORD', 'PUTRECORD',
                 'INTEGER', 'REAL', 'STRING', 'CHAR', 'BOOLEAN', 'ARRAY', 'OF',
                 'AND', 'OR', 'NOT', 'TRUE', 'FALSE',
-                'TYPE', 'ENDTYPE', 'CASE', 'ENDCASE', 'OTHERWISE', 'BREAK'
+                'TYPE', 'ENDTYPE', 'CASE', 'ENDCASE', 'OTHERWISE'
             ],
             operators: ['<-', '=', '<>', '<', '>', '<=', '>=', '+', '-', '*', '/', 'MOD'],
             builtinFunctions: [
