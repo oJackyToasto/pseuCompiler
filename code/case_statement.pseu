@@ -8,16 +8,16 @@ OUTPUT "Grade Calculator"
 OUTPUT "Enter a grade (0-100): "
 INPUT grade
 
-CASE grade OF
-    90 TO 100 : 
+CASE OF grade
+    90 : 
         message <- "Excellent! Grade A"
-    80 TO 89 : 
+    85 : 
         message <- "Good! Grade B"
-    70 TO 79 : 
+    80 : 
         message <- "Average! Grade C"
-    60 TO 69 : 
+    75 : 
         message <- "Below Average! Grade D"
-    0 TO 59 : 
+    70 : 
         message <- "Fail! Grade F"
     OTHERWISE : 
         message <- "Invalid grade entered"
@@ -32,7 +32,7 @@ OUTPUT "Menu System"
 OUTPUT "Enter choice (A, B, C, or Q to quit): "
 INPUT choice
 
-CASE UPPER(choice) OF
+CASE OF UPPER(choice)
     "A" : 
         OUTPUT "Option A selected"
     "B" : 

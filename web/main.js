@@ -176,16 +176,16 @@ DECLARE message : STRING
 OUTPUT "Grade Calculator"
 OUTPUT "Grade entered: ", grade
 
-CASE grade OF
-    90 TO 100 : 
+CASE OF grade
+    90 : 
         message <- "Excellent! Grade A"
-    80 TO 89 : 
+    85 : 
         message <- "Good! Grade B"
-    70 TO 79 : 
+    80 : 
         message <- "Average! Grade C"
-    60 TO 69 : 
+    75 : 
         message <- "Below Average! Grade D"
-    0 TO 59 : 
+    70 : 
         message <- "Fail! Grade F"
     OTHERWISE : 
         message <- "Invalid grade entered"
@@ -199,7 +199,7 @@ OUTPUT ""
 OUTPUT "Menu System"
 OUTPUT "Choice entered: ", choice
 
-CASE UPPER(choice) OF
+CASE OF UPPER(choice)
     "A" : 
         OUTPUT "Option A selected"
     "B" : 
@@ -658,8 +658,8 @@ function initMonaco() {
                         label: 'CASE',
                         kind: monaco.languages.CompletionItemKind.Snippet,
                         detail: 'CASE statement (snippet)',
-                        documentation: 'CASE expression OF ... ENDCASE',
-                        insertText: 'CASE ${1:expression} OF\n    ${2:value} : ${3:statement}\n    OTHERWISE : ${4:statement}\nENDCASE',
+                        documentation: 'CASE OF identifier ... ENDCASE',
+                        insertText: 'CASE OF ${1:identifier}\n    ${2:value1} : ${3:statement1}\n    ${4:statement2}\n    ${5:value2} : ${6:statement1}\n    ${7:statement2}\n    OTHERWISE : ${8:statement}\nENDCASE',
                         range: range,
                         insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                         sortText: '0'

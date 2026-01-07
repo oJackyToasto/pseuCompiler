@@ -321,12 +321,19 @@ impl CompletionProvider {
         // Always include keywords and built-in functions (available everywhere)
         for &keyword in KEYWORDS {
             if matches_prefix(keyword) {
+                // Special handling for CASE keyword - should insert "CASE OF "
+                let insert_text = if keyword == "CASE" {
+                    "CASE OF ".to_string()
+                } else {
+                    keyword.to_string()
+                };
+                
                 suggestions.push(CompletionItem {
                     label: keyword.to_string(),
                     kind: CompletionItemKind::Keyword,
                     detail: Some("Keyword".to_string()),
                     documentation: Some(Self::get_keyword_documentation(keyword)),
-                    insert_text: keyword.to_string(),
+                    insert_text,
                 });
             }
         }
@@ -502,6 +509,7 @@ impl CompletionProvider {
             "OUTPUT" => "Outputs a value".to_string(),
             "INPUT" => "Reads input from user".to_string(),
             "ARRAY" => "Array type declaration".to_string(),
+            "CASE" => "CASE OF <identifier> - Switch statement".to_string(),
             _ => format!("Keyword: {}", keyword),
         }
     }
