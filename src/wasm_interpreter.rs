@@ -341,6 +341,98 @@ impl WasmInterpreter {
                     }
                 }
             }
+            Stmt::DeclareMultiple { declarations, type_name, span } => {
+                // Handle multiple declarations with shared type
+                for (name, initial_value) in declarations {
+                    match type_name {
+                        Type::INTEGER | Type::REAL | Type::BOOLEAN | Type::CHAR | Type::STRING => {
+                            let value = if let Some(expr) = initial_value {
+                                self.evaluate_expr(expr)?
+                            } else {
+                                self.default_value(type_name)?
+                            };
+                            self.variables.insert(name.clone(), value);
+                            self.variables_type.insert(name.clone(), type_name.clone());
+                        }
+                        Type::ARRAY { dimensions, element_type } => {
+                            let mut dim_size = Vec::new();
+                            let mut start_indices = Vec::new();
+                            let mut total_size = 1;
+
+                            for (start_expr, end_expr) in dimensions {
+                                let start_val = self.evaluate_expr(start_expr)?;
+                                let end_val = self.evaluate_expr(end_expr)?;
+
+                                let start = match start_val {
+                                    Value::Integer(i) => i,
+                                    _ => {
+                                        let msg = format!("Invalid start index type: {:?}", start_val);
+                                        eprintln!("Error at line {}: {}", span.line, msg);
+                                        return Err(msg);
+                                    }
+                                };
+                                let end = match end_val {
+                                    Value::Integer(i) => i,
+                                    _ => {
+                                        let msg = format!("Invalid end index type: {:?}", end_val);
+                                        eprintln!("Error at line {}: {}", span.line, msg);
+                                        return Err(msg);
+                                    }
+                                };
+
+                                if start < 0 || end < start {
+                                    let msg = format!("Invalid array dimensions: start index must be >= 0 and end index must be >= start index");
+                                    eprintln!("Error at line {}: {}", span.line, msg);
+                                    return Err(msg);
+                                }
+
+                                let size = (end - start + 1) as usize;
+                                dim_size.push(size);
+                                start_indices.push(start);
+                                total_size *= size;
+                            }
+
+                            let default_value = self.default_value(element_type)?;
+                            let data = vec![default_value; total_size];
+
+                            self.variables.insert(name.clone(), Value::Array {
+                                element_type: element_type.clone(),
+                                dimensions: dim_size,
+                                start_indices: start_indices.clone(),
+                                data,
+                            });
+                            self.variables_type.insert(name.clone(), Type::ARRAY { dimensions: dimensions.clone(), element_type: element_type.clone() });
+                        }
+                        Type::Custom(custom_name) => {
+                            let resolved_type = self.type_definitions.get(custom_name)
+                                .ok_or_else(|| format!("Type {} not found", custom_name))?
+                                .clone();
+                            let value = if let Some(expr) = initial_value {
+                                self.evaluate_expr(expr)?
+                            } else {
+                                self.default_value(&resolved_type)?
+                            };
+                            self.variables.insert(name.clone(), value);
+                            self.variables_type.insert(name.clone(), resolved_type);
+                        }
+                        Type::Record { .. } | Type::Enum { .. } | Type::Pointer { .. } | Type::Set { .. } => {
+                            let value = if let Some(expr) = initial_value {
+                                self.evaluate_expr(expr)?
+                            } else {
+                                self.default_value(type_name)?
+                            };
+                            self.variables.insert(name.clone(), value);
+                            self.variables_type.insert(name.clone(), type_name.clone());
+                        }
+                        _ => {
+                            let msg = format!("Unsupported type: {:?}", type_name);
+                            eprintln!("Error at line {}: {}", span.line, msg);
+                            return Err(msg);
+                        }
+                    }
+                }
+                Ok(())
+            }
             Stmt::Define { name, values, type_name, span } => {
                 let type_def = self.type_definitions.get(type_name)
                     .ok_or_else(|| format!("Type {} not found", type_name))?;

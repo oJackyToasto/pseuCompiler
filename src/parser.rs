@@ -1223,16 +1223,77 @@ impl Parser {
     }
 
     fn parse_declare(&mut self) -> Result<Stmt, String> {
+        let span = self.get_span();
         self.expect(Token::Keyword("DECLARE".to_string()))?;
 
-        let mut declarations = vec![self.parse_one_declare()?];
+        // Parse first variable name
+        let first_name = match self.current_token() {
+            Token::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            _ => return Err(self.error_with_pos("Expected identifier")),
+        };
 
-        while matches!(self.current_token(), Token::Comma) {
+        // Check if first variable has initial value
+        let first_initial = if matches!(self.current_token(), Token::LeftArrow) {
             self.advance();
-            declarations.push(self.parse_one_declare()?);
-        }
+            Some(Box::new(self.parse_expression()?))
+        } else {
+            None
+        };
 
-        Ok(declarations.into_iter().next().unwrap())
+        // Check if there are more variables (comma-separated) or if we hit the colon (type)
+        if matches!(self.current_token(), Token::Comma) {
+            // Multiple declarations: DECLARE x, y, z : TYPE or DECLARE a <- 0, b <- 1, c : TYPE
+            let mut declarations = vec![(first_name, first_initial)];
+
+            // Parse additional variables
+            while matches!(self.current_token(), Token::Comma) {
+                self.advance(); // consume comma
+                
+                let name = match self.current_token() {
+                    Token::Identifier(name) => {
+                        let name = name.clone();
+                        self.advance();
+                        name
+                    }
+                    _ => return Err(self.error_with_pos("Expected identifier after comma")),
+                };
+
+                // Check if this variable has initial value
+                let initial_value = if matches!(self.current_token(), Token::LeftArrow) {
+                    self.advance();
+                    Some(Box::new(self.parse_expression()?))
+                } else {
+                    None
+                };
+
+                declarations.push((name, initial_value));
+            }
+
+            // Now expect the colon and type (shared by all variables)
+            self.expect(Token::Colon)?;
+            let type_name = self.parse_type()?;
+
+            Ok(Stmt::DeclareMultiple {
+                declarations,
+                type_name,
+                span,
+            })
+        } else {
+            // Single declaration: DECLARE x : TYPE or DECLARE x <- value : TYPE
+            self.expect(Token::Colon)?;
+            let type_name = self.parse_type()?;
+
+            Ok(Stmt::Declare {
+                name: first_name,
+                type_name,
+                initial_value: first_initial,
+                span,
+            })
+        }
     }
 
     fn parse_one_declare(&mut self) -> Result<Stmt, String> {

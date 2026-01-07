@@ -145,6 +145,12 @@ pub enum Stmt {
         span: Span,
     },
 
+    DeclareMultiple {
+        declarations: Vec<(String, Option<Box<Expr>>)>,
+        type_name: Type,
+        span: Span,
+    },
+
     Assign {
         name: String,
         indices: Option<Vec<Expr>>,
