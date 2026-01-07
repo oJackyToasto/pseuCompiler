@@ -32,7 +32,7 @@ OUTPUT "Menu System"
 OUTPUT "Enter choice (A, B, C, or Q to quit): "
 INPUT choice
 
-CASE OF UPPER(choice)
+CASE OF UCASE(choice)
     "A" : 
         OUTPUT "Option A selected"
     "B" : 

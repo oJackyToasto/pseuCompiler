@@ -125,13 +125,12 @@ DECLARE sum: INTEGER
 sum <- x + y
 OUTPUT "Sum of ", x, " and ", y, " is ", sum`,
     string_manipulation: `// String Manipulation Examples
-// Demonstrates: LENGTH, UPPER, LOWER, LEFT, RIGHT, SUBSTRING, MID
+// Demonstrates: LENGTH, UCASE, LCASE, RIGHT, SUBSTRING, MID
 
 DECLARE text <- "Hello, Pseudocode World!": STRING
 DECLARE len : INTEGER
 DECLARE upperText : STRING
 DECLARE lowerText : STRING
-DECLARE leftPart : STRING
 DECLARE rightPart : STRING
 DECLARE middlePart : STRING
 
@@ -142,16 +141,12 @@ len <- LENGTH(text)
 OUTPUT "Length: ", len
 
 // Convert to uppercase
-upperText <- UPPER(text)
+upperText <- UCASE(text)
 OUTPUT "Uppercase: ", upperText
 
 // Convert to lowercase
-lowerText <- LOWER(text)
+lowerText <- LCASE(text)
 OUTPUT "Lowercase: ", lowerText
-
-// Extract left part (first 5 characters)
-leftPart <- LEFT(text, 5)
-OUTPUT "Left 5 chars: ", leftPart
 
 // Extract right part (last 6 characters)
 rightPart <- RIGHT(text, 6)
@@ -199,7 +194,7 @@ OUTPUT ""
 OUTPUT "Menu System"
 OUTPUT "Choice entered: ", choice
 
-CASE OF UPPER(choice)
+CASE OF UCASE(choice)
     "A" : 
         OUTPUT "Option A selected"
     "B" : 
@@ -810,8 +805,8 @@ function initMonaco() {
             ],
             operators: ['<-', '=', '<>', '<', '>', '<=', '>=', '+', '-', '*', '/', 'MOD'],
             builtinFunctions: [
-                'LENGTH', 'UPPER', 'LOWER', 'SUBSTRING', 'LEFT', 'RIGHT', 'MID',
-                'ROUND', 'RANDOM', 'EOF', 'ASC', 'CHR'
+                'LENGTH', 'UCASE', 'LCASE', 'SUBSTRING', 'RIGHT', 'MID',
+                'ROUND', 'RANDOM', 'RAND', 'EOF',
             ],
             tokenizer: {
                 root: [
