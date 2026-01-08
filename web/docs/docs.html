@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - Pseudocode</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+    <div class="docs-container">
+        <header class="docs-header">
+            <div class="header-left">
+                <h1>Pseudocode Documentation</h1>
+            </div>
+            <div class="controls">
+                <button id="themeBtn" class="btn btn-secondary">Dark</button>
+            </div>
+        </header>
+        
+        <div class="docs-content">
+            <nav class="docs-sidebar">
+                <h2>Documentation</h2>
+                <ul id="docsNav" class="docs-nav">
+                    <!-- Navigation will be populated by JavaScript -->
+                </ul>
+            </nav>
+            
+            <main class="docs-main">
+                <div id="docsContent" class="docs-markdown">
+                    <!-- Markdown content will be rendered here -->
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script type="module" src="docs.js"></script>
+</body>
+</html>
+
