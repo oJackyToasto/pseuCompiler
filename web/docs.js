@@ -2,11 +2,19 @@
 const docsStructure = {
     statements: [
         { name: 'IF Statement', file: 'statements/if.md' },
-        { name: 'WHILE Loop', file: 'statements/while.md' }
+        { name: 'WHILE Loop', file: 'statements/while.md' },
+        { name: 'CASE Statement', file: 'statements/case_of.md' },
+        { name: 'REPEAT-UNTIL Loop', file: 'statements/repeat_until.md' },
+        { name: 'FOR Loop', file: 'statements/for.md'},
     ],
     builtins: [
         // Add builtin docs here when available
-    ]
+    ],
+    basics: [
+        { name: 'Data Types', file: 'basics/data_types.md'},
+        { name: 'Declaration', file: 'basics/declaration.md'},
+        { name: 'Assignment', file: 'basics/assignment.md'},
+    ],
 };
 
 let currentTheme = 'dark';
@@ -46,6 +54,32 @@ function buildNavigation() {
     
     nav.innerHTML = '';
     
+    if (docsStructure.basics.length > 0) {
+        const basicsGroup = document.createElement('li');
+        basicsGroup.className = 'nav-group';
+        basicsGroup.innerHTML = '<h3>Basic Pseudocode</h3>';
+        nav.appendChild(basicsGroup);
+        
+        const basicsList = document.createElement('ul');
+        basicsList.className = 'nav-items';
+        
+        docsStructure.basics.forEach(doc => {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = `#${doc.file}`;
+            link.textContent = doc.name;
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                loadDocument(doc.file);
+                window.location.hash = doc.file;
+            });
+            item.appendChild(link);
+            basicsList.appendChild(item);
+        });
+        
+        basicsGroup.appendChild(basicsList);
+    }
+
     // Statements section
     if (docsStructure.statements.length > 0) {
         const statementsGroup = document.createElement('li');
@@ -111,7 +145,7 @@ async function loadDocument(filePath) {
     
     try {
         // Fetch markdown file
-        const response = await fetch(`documentations/${filePath}`);
+        const response = await fetch(`docs/${filePath}`);
         if (!response.ok) {
             throw new Error(`Failed to load: ${response.statusText}`);
         }
@@ -204,4 +238,5 @@ window.addEventListener('hashchange', () => {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', initDocs);
+
 

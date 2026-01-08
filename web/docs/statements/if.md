@@ -1,9 +1,9 @@
 # IF statements
 
-IF statements are used to select based on a boolean value. 
+`IF` statements are used to select based on a `BOOLEAN` value. 
 
-IF statements may or may not have an `ELSE` clause.
-IF statements without an else clause are written as follows:
+`IF` statements may or may not have an `ELSE` clause.
+`IF` statements without an else clause are written as follows:
 
 ```
 IF <condition> THEN
@@ -11,7 +11,7 @@ IF <condition> THEN
 ENDIF
 ```
 
-IF statements with an else clause are written as follows:
+`IF` statements with an `ELSE` clause are written as follows:
 
 ```
 IF <condition> THEN
@@ -21,7 +21,7 @@ ELSE
 ENDIF
 ```
 
-NESTED IF statements are written as follows:
+NESTED `IF` statements are written as follows:
 
 ```
 IF <condition> THEN
