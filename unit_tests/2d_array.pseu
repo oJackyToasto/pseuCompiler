@@ -1,0 +1,14 @@
+DECLARE rows <- 10 : INTEGER
+DECLARE cols <- 10 : INTEGER
+CONSTANT rows
+CONSTANT cols
+
+DECLARE arr : ARRAY[1:rows, 1:cols] OF INTEGER
+
+FOR i <- 1 TO rows
+    FOR j <- 1 TO cols
+        arr[i, j] <- ROUND(RANDOM()*100, 0)
+    NEXT j
+NEXT i
+
+OUTPUT arr

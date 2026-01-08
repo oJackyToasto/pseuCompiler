@@ -1,0 +1,48 @@
+// CASE Statement Example
+// Demonstrates: CASE, OTHERWISE, multiple value matching
+
+DECLARE grade : INTEGER
+DECLARE message : STRING
+
+OUTPUT "Grade Calculator"
+OUTPUT "Enter a grade (0-100): "
+INPUT grade
+
+CASE OF grade
+    90 : 
+        message <- "Excellent! Grade A"
+    85 : 
+        message <- "Good! Grade B"
+    80 : 
+        message <- "Average! Grade C"
+    75 : 
+        message <- "Below Average! Grade D"
+    70 : 
+        message <- "Fail! Grade F"
+    OTHERWISE : 
+        message <- "Invalid grade entered"
+ENDCASE
+
+OUTPUT message
+
+// Another example with character matching
+DECLARE choice : STRING
+OUTPUT ""
+OUTPUT "Menu System"
+OUTPUT "Enter choice (A, B, C, or Q to quit): "
+INPUT choice
+
+CASE OF UCASE(choice)
+    "A" : 
+        OUTPUT "Option A selected"
+    "B" : 
+        OUTPUT "Option B selected"
+    "C" : 
+        OUTPUT "Option C selected"
+    "Q" : 
+        OUTPUT "Quitting..."
+    OTHERWISE : 
+        OUTPUT "Invalid choice"
+ENDCASE
+
+

@@ -1,0 +1,70 @@
+// PROCEDURE Example
+// Demonstrates: PROCEDURE, ENDPROCEDURE, procedures without return values
+
+DECLARE num1 <- 10: INTEGER
+DECLARE num2 <- 5: INTEGER
+DECLARE result : INTEGER
+
+// Procedure to display a greeting
+PROCEDURE DisplayGreeting(name : STRING)
+    OUTPUT "Hello, ", name, "!"
+    OUTPUT "Welcome to Pseudocode!"
+ENDPROCEDURE
+
+// Procedure to swap two numbers
+PROCEDURE SwapNumbers(VAR a : INTEGER, VAR b : INTEGER)
+    DECLARE temp : INTEGER
+    temp <- a
+    a <- b
+    b <- temp
+ENDPROCEDURE
+
+// Procedure to display calculation results
+PROCEDURE DisplayCalculation(x : INTEGER, y : INTEGER, operation : STRING)
+    DECLARE result : INTEGER
+    
+    IF operation = "add" THEN
+        result <- x + y
+        OUTPUT x, " + ", y, " = ", result
+    ELSE IF operation = "subtract" THEN
+        result <- x - y
+        OUTPUT x, " - ", y, " = ", result
+    ELSE IF operation = "multiply" THEN
+        result <- x * y
+        OUTPUT x, " * ", y, " = ", result
+    ELSE
+        OUTPUT "Unknown operation"
+    ENDIF
+ENDPROCEDURE
+
+// Main program
+OUTPUT "=== Procedure Examples ==="
+OUTPUT ""
+
+// Call greeting procedure
+CALL DisplayGreeting("Alice")
+
+OUTPUT ""
+OUTPUT "Before swap:"
+OUTPUT "num1 = ", num1
+OUTPUT "num2 = ", num2
+
+// Call swap procedure
+CALL SwapNumbers(num1, num2)
+
+OUTPUT ""
+OUTPUT "After swap:"
+OUTPUT "num1 = ", num1
+OUTPUT "num2 = ", num2
+
+OUTPUT ""
+OUTPUT "Calculations:"
+CALL DisplayCalculation(15, 3, "add")
+CALL DisplayCalculation(15, 3, "subtract")
+CALL DisplayCalculation(15, 3, "multiply")
+
+
+
+
+
+

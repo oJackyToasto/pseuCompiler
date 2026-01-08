@@ -1,0 +1,29 @@
+DECLARE Alphabet[1:26] : ARRAY
+Alphabet <- ['A', 'B']
+
+FUNCTION FindRemainder(Input)
+    //Declaring needed variables
+    DECLARE SingleChar : STRING, Sum : INTEGER
+
+    //Looping through the Input from the user
+    FOR counter <- 1 TO LENGTH(Input) 
+
+        //Getting the single character
+        SingleChar <- SUBSTRING(counter, 1)
+
+        //Searching the array for the single character
+        DECLARE found <- FALSE: BOOLEAN
+        DECLARE alphacounter : INTEGER
+        alphacounter <- 1
+        WHILE alphacounter <= 26 AND NOT found DO
+            IF Alphabet[alphacounter] = SingleChar THEN
+                Sum <- Sum + alphacounter
+                found <- TRUE
+            ENDIF
+            alphacounter <- alphacounter + 1
+        ENDWHILE
+        
+    NEXT counter
+    //Returning remainder 
+    RETURN MOD(Sum, 26)
+ENDFUNCTION

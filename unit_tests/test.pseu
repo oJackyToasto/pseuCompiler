@@ -1,0 +1,3 @@
+DECLARE x <- 10 : INTEGER
+
+FOR i <- 1 TO
