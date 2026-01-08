@@ -30,3 +30,5 @@ echo To attach binaries, you can add them manually in the GitHub UI or use:
 echo gh release upload %VERSION% target\release\pseudocode.exe
 
 
+
+

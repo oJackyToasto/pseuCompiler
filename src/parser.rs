@@ -1,6 +1,6 @@
 use crate::ast::{Expr, BinaryOp, UnaryOp, Stmt, Type, FileMode, CaseBranch, TypeDeclarationVariant, TypeField, Function, Param, Procedure, Span};
 use crate::lexer::{Token, Lexer, TokenWithPos};
-use log::{debug, trace, error,};
+use log::{debug, trace, error};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -53,32 +53,6 @@ impl Parser {
         error_msg
     }
 
-    fn check_eof(&self, block_type: &str) -> Result<(), String> {
-        if matches!(self.current_token(), Token::EOF) {
-            let (line, column) = self.get_position();
-            let error_msg = format!(
-                "Unexpected end of file: {} block was not closed. Expected {} at line {}:{}",
-                block_type,
-                match block_type {
-                    "FUNCTION" => "ENDFUNCTION",
-                    "PROCEDURE" => "ENDPROCEDURE",
-                    "TYPE" => "ENDTYPE",
-                    "IF" => "ENDIF",
-                    "WHILE" => "ENDWHILE",
-                    "FOR" => "NEXT",
-                    "REPEAT" => "UNTIL",
-                    "CASE" => "ENDCASE",
-                    _ => "closing statement",
-                },
-                line,
-                column
-            );
-            error!("Parse error: {}", error_msg);
-            return Err(error_msg);
-        }
-        Ok(())
-    }
-
     fn _next_token(&mut self) -> &Token {
         self.pos += 1;
         &self.tokens[self.pos]
@@ -98,8 +72,8 @@ impl Parser {
     
     fn parse_number(&mut self) -> Result<Expr, String> {
         if let Token::Number(n) = self.current_token() {
-            let span = self.get_span();
             let number = n.clone();
+            let span = self.get_span();
             self.advance();
             Ok(Expr::Number(number, span))
         } else {
@@ -110,8 +84,8 @@ impl Parser {
     fn parse_string(&mut self) -> Result<Expr, String> {
         match self.current_token() {
             Token::String(s) => {
-                let span = self.get_span();
                 let string = s.clone();
+                let span = self.get_span();
                 self.advance();
                 Ok(Expr::String(string, span))
             }
@@ -122,8 +96,8 @@ impl Parser {
     fn _parse_variable(&mut self) -> Result<Expr, String> {
         match self.current_token() {
             Token::Identifier(v) => {
-                let span = self.get_span();
                 let variable = v.clone();
+                let span = self.get_span();
                 self.advance();
                 Ok(Expr::Variable(variable, span))
             }
@@ -134,8 +108,8 @@ impl Parser {
     fn parse_char(&mut self) -> Result<Expr, String> {
         match self.current_token() {
             Token::Char(c) => {
-                let span = self.get_span();
                 let char = c.clone();
+                let span = self.get_span();
                 self.advance();
                 Ok(Expr::Char(char, span))
             }
@@ -186,7 +160,6 @@ impl Parser {
             Token::Keyword(kw) => match kw.as_str() {
                 "DECLARE" => self.parse_declare(),
                 "DEFINE" => self.parse_define(),
-                "CONSTANT" => self.parse_constant(),
                 "TYPE" => self.parse_type_declaration(),
                 "IF" => self.parse_if(),
                 "WHILE" => self.parse_while(),
@@ -218,7 +191,7 @@ impl Parser {
 
     fn parse_procedure_declaration(&mut self) -> Result<Stmt, String> {
         trace!("Parsing PROCEDURE declaration");
-        let span = self.get_span();
+        let span_start = self.get_position();
         self.expect(Token::Keyword("PROCEDURE".to_string()))?;
         
         // Parse procedure name
@@ -241,6 +214,7 @@ impl Parser {
         if !matches!(self.current_token(), Token::RightParen) {
             loop {
                 // Parse parameter name
+                let param_span = self.get_position();
                 let param_name = match self.current_token() {
                     Token::Identifier(n) => {
                         let name = n.clone();
@@ -255,7 +229,6 @@ impl Parser {
                 
                 // Parse parameter type
                 let param_type = self.parse_type()?;
-                let param_span = self.get_position();
                 
                 params.push(Param {
                     name: param_name,
@@ -283,8 +256,6 @@ impl Parser {
         // Parse procedure body until ENDPROCEDURE
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDPROCEDURE") {
-            self.check_eof("PROCEDURE")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -306,20 +277,19 @@ impl Parser {
         // Expect ENDPROCEDURE
         self.expect(Token::Keyword("ENDPROCEDURE".to_string()))?;
         
-        let proc_span = span.clone();
+        let span = Span { line: span_start.0, column: span_start.1 };
         Ok(Stmt::ProcedureDeclaration {
             procedure: Procedure {
                 name,
                 params,
                 body,
-                span: proc_span,
+                span: span.clone(),
             },
             span,
         })
     }
     
     fn parse_define(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("DEFINE".to_string()))?;
         
         let name = match self.current_token() {
@@ -396,38 +366,11 @@ impl Parser {
             name,
             values,
             type_name,
-            span,
+            span: self.get_span(),
         })
     }
 
-    fn parse_constant(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
-        self.expect(Token::Keyword("CONSTANT".to_string()))?;
-
-        let name = match self.current_token() {
-            Token::Identifier(n) => {
-                let name = n.clone();
-                self.advance();
-                name
-            }
-            _ => return Err(self.error_with_pos("Expected constant name")),
-        };
-
-        // Check if there's an assignment operator (<-)
-        let value = if matches!(self.current_token(), Token::LeftArrow) {
-            // CONSTANT x <- expr (assign and lock)
-            self.advance(); // consume <-
-            Some(Box::new(self.parse_expression()?))
-        } else {
-            // CONSTANT x (lock with current value)
-            None
-        };
-        
-        Ok(Stmt::Constant { name, value, span })
-    }
-
     fn parse_call(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("CALL".to_string()))?;
         
         // Parse procedure name
@@ -478,12 +421,11 @@ impl Parser {
         Ok(Stmt::Call {
             name,
             args,
-            span,
+            span: self.get_span(),
         })
     }
     
     fn parse_return(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("RETURN".to_string()))?;
         
         // Check if there's a return value (expression)
@@ -500,12 +442,12 @@ impl Parser {
             Some(Box::new(self.parse_expression()?))
         };
         
-        Ok(Stmt::Return { value, span })
+        Ok(Stmt::Return { value, span: self.get_span() })
     }
 
     fn parse_function_declaration(&mut self) -> Result<Stmt, String> {
         trace!("Parsing FUNCTION declaration");
-        let span = self.get_span();
+        let span_start = self.get_position();
         self.expect(Token::Keyword("FUNCTION".to_string()))?;
 
         let name = match self.current_token() {
@@ -536,11 +478,10 @@ impl Parser {
 
                 let param_type = self.parse_type()?;
 
-                let param_span = self.get_position();
                 params.push(Param {
                     name: param,
                     type_name: param_type,
-                    span: Span { line: param_span.0, column: param_span.1 },
+                    span: self.get_span(),
                 });
 
                 match self.current_token() {
@@ -563,8 +504,6 @@ impl Parser {
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDFUNCTION") {
-            self.check_eof("FUNCTION")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -585,14 +524,14 @@ impl Parser {
 
         self.expect(Token::Keyword("ENDFUNCTION".to_string()))?;
 
-        let function_span = span.clone();
+        let span = Span { line: span_start.0, column: span_start.1 };
         Ok(Stmt::FunctionDeclaration {
             function: Function {
                 name,
                 params,
                 return_type,
                 body,
-                span: function_span,
+                span: span.clone(),
             },
             span,
         })
@@ -600,7 +539,6 @@ impl Parser {
 
     fn parse_type_declaration(&mut self) -> Result<Stmt, String> {
         trace!("Parsing TYPE declaration");
-        let span = self.get_span();
         self.expect(Token::Keyword("TYPE".to_string()))?;
         
         let name = match self.current_token() {
@@ -630,7 +568,7 @@ impl Parser {
                             variant: TypeDeclarationVariant::Pointer {
                                 points_to: Box::new(points_to),
                             },
-                            span,
+                            span: self.get_span(),
                         })
                     }
                     
@@ -664,7 +602,7 @@ impl Parser {
                         Ok(Stmt::TypeDeclaration {
                             name,
                             variant: TypeDeclarationVariant::Enum { values },
-                            span,
+                            span: self.get_span(),
                         })
                     }
                     
@@ -679,7 +617,7 @@ impl Parser {
                             variant: TypeDeclarationVariant::Set {
                                 element_type: Box::new(element_type),
                             },
-                            span,
+                            span: self.get_span(),
                         })
                     }
                     
@@ -697,7 +635,7 @@ impl Parser {
                     variant: TypeDeclarationVariant::Pointer {
                         points_to: Box::new(points_to),
                     },
-                    span,
+                    span: self.get_span(),
                 })
             }
             
@@ -712,7 +650,7 @@ impl Parser {
                     variant: TypeDeclarationVariant::Set {
                         element_type: Box::new(element_type),
                     },
-                    span,
+                    span: self.get_span(),
                 })
             }
             
@@ -721,8 +659,6 @@ impl Parser {
                 let mut fields = Vec::new();
                 
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDTYPE") {
-                    self.check_eof("TYPE")?;
-                    
                     // Skip leading newlines (whitespace)
                     while matches!(self.current_token(), Token::Newline) {
                         self.advance();
@@ -748,11 +684,10 @@ impl Parser {
                         self.expect(Token::Colon)?;
                         let field_type = self.parse_type()?;
                         
-                        let field_span = self.get_position();
                         fields.push(TypeField {
                             name: field_name,
                             type_name: field_type,
-                            span: Span { line: field_span.0, column: field_span.1 },
+                            span: self.get_span(),
                         });
                         
                         // Consume trailing newline after DECLARE statement
@@ -769,14 +704,13 @@ impl Parser {
                 Ok(Stmt::TypeDeclaration {
                     name,
                     variant: TypeDeclarationVariant::Record { fields },
-                    span,
+                    span: self.get_span(),
                 })
             }
         }
     }
 
     fn parse_if(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("IF".to_string()))?;
 
         let condition = self.parse_expression()?;
@@ -786,8 +720,6 @@ impl Parser {
         let mut then_stmt = Vec::new();
 
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF" || kw == "ELSE") {
-            self.check_eof("IF")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -815,8 +747,6 @@ impl Parser {
             } else {
                 let mut else_body = Vec::new();
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDIF") {
-                    self.check_eof("IF")?;
-                    
                     // Skip leading newlines (whitespace)
                     while matches!(self.current_token(), Token::Newline) {
                         self.advance();
@@ -852,12 +782,11 @@ impl Parser {
             condition: Box::new(condition),
             then_stmt,
             else_stmt,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_while(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("WHILE".to_string()))?;
     
         let condition = self.parse_expression()?;
@@ -873,8 +802,6 @@ impl Parser {
     
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDWHILE") {
-            self.check_eof("WHILE")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -898,12 +825,11 @@ impl Parser {
         Ok(Stmt::While {
             condition: Box::new(condition),
             body,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_for(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("FOR".to_string()))?;
 
         // Parse counter variable name
@@ -933,8 +859,6 @@ impl Parser {
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "NEXT") {
-            self.check_eof("FOR")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -974,18 +898,15 @@ impl Parser {
             end: Box::new(end),
             step,
             body,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_repeat_until(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("REPEAT".to_string()))?;
 
         let mut body = Vec::new();
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "UNTIL") {
-            self.check_eof("REPEAT")?;
-            
             // Skip leading newlines (whitespace)
             while matches!(self.current_token(), Token::Newline) {
                 self.advance();
@@ -1009,14 +930,14 @@ impl Parser {
         let condition = self.parse_expression()?;
 
         Ok(Stmt::RepeatUntil {
-            body,
-            condition: Box::new(condition),
-            span,
-        })
+                body,
+                condition: Box::new(condition),
+                span: self.get_span(),
+            }
+        )
     }
 
     fn parse_case(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("CASE".to_string()))?;
         self.expect(Token::Keyword("OF".to_string()))?;
         
@@ -1026,16 +947,12 @@ impl Parser {
         let mut otherwise = None;
         
         while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE") {
-            self.check_eof("CASE")?;
-            
             if matches!(self.current_token(), Token::Keyword(kw) if kw == "OTHERWISE") {
                 self.advance();
                 self.expect(Token::Colon)?;
                 
                 let mut otherwise_body = Vec::new();
                 while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE") {
-                    self.check_eof("CASE")?;
-                    
                     // Skip leading newlines (whitespace)
                     while matches!(self.current_token(), Token::Newline) {
                         self.advance();
@@ -1064,7 +981,6 @@ impl Parser {
             let mut body = Vec::new();
             
             while !matches!(self.current_token(), Token::Keyword(kw) if kw == "ENDCASE" || kw == "OTHERWISE") {
-                self.check_eof("CASE")?;
                 // Skip leading newlines (whitespace)
                 while matches!(self.current_token(), Token::Newline) {
                     self.advance();
@@ -1094,11 +1010,10 @@ impl Parser {
                 }
             }
             
-            let case_span = self.get_position();
             cases.push(CaseBranch {
                 value: Box::new(value),
                 body,
-                span: Span { line: case_span.0, column: case_span.1 },
+                span: self.get_span(),
             });
         }
         
@@ -1108,12 +1023,11 @@ impl Parser {
             expression: Box::new(expression),
             cases,
             otherwise,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_assignment(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         // Parse the left-hand side (lvalue) - can be variable, array access, field access, or pointer dereference
         let name = match self.current_token() {
             Token::Identifier(n) => {
@@ -1188,17 +1102,17 @@ impl Parser {
             name: final_name,
             indices,
             expression: Box::new(value),
-            span,
+            span: self.get_span(),
         })
     }
     
     fn parse_input(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("INPUT".to_string()))?;
 
          match self.current_token() {
             Token::Identifier(name) => {
                 let name = name.clone();
+                let span = self.get_span();
                 self.advance();
                 Ok(Stmt::Input { name, span })
             }
@@ -1207,7 +1121,6 @@ impl Parser {
     }
         
     fn parse_output(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("OUTPUT".to_string()))?;
         
         let mut exprs = Vec::new();
@@ -1219,85 +1132,23 @@ impl Parser {
             exprs.push(self.parse_expression()?);
         }
 
-        Ok(Stmt::Output { exprs, span })  
+        Ok(Stmt::Output { exprs, span: self.get_span() })  
     }
 
     fn parse_declare(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("DECLARE".to_string()))?;
 
-        // Parse first variable name
-        let first_name = match self.current_token() {
-            Token::Identifier(name) => {
-                let name = name.clone();
-                self.advance();
-                name
-            }
-            _ => return Err(self.error_with_pos("Expected identifier")),
-        };
+        let mut declarations = vec![self.parse_one_declare()?];
 
-        // Check if first variable has initial value
-        let first_initial = if matches!(self.current_token(), Token::LeftArrow) {
+        while matches!(self.current_token(), Token::Comma) {
             self.advance();
-            Some(Box::new(self.parse_expression()?))
-        } else {
-            None
-        };
-
-        // Check if there are more variables (comma-separated) or if we hit the colon (type)
-        if matches!(self.current_token(), Token::Comma) {
-            // Multiple declarations: DECLARE x, y, z : TYPE or DECLARE a <- 0, b <- 1, c : TYPE
-            let mut declarations = vec![(first_name, first_initial)];
-
-            // Parse additional variables
-            while matches!(self.current_token(), Token::Comma) {
-                self.advance(); // consume comma
-                
-                let name = match self.current_token() {
-                    Token::Identifier(name) => {
-                        let name = name.clone();
-                        self.advance();
-                        name
-                    }
-                    _ => return Err(self.error_with_pos("Expected identifier after comma")),
-                };
-
-                // Check if this variable has initial value
-                let initial_value = if matches!(self.current_token(), Token::LeftArrow) {
-                    self.advance();
-                    Some(Box::new(self.parse_expression()?))
-                } else {
-                    None
-                };
-
-                declarations.push((name, initial_value));
-            }
-
-            // Now expect the colon and type (shared by all variables)
-            self.expect(Token::Colon)?;
-            let type_name = self.parse_type()?;
-
-            Ok(Stmt::DeclareMultiple {
-                declarations,
-                type_name,
-                span,
-            })
-        } else {
-            // Single declaration: DECLARE x : TYPE or DECLARE x <- value : TYPE
-            self.expect(Token::Colon)?;
-            let type_name = self.parse_type()?;
-
-            Ok(Stmt::Declare {
-                name: first_name,
-                type_name,
-                initial_value: first_initial,
-                span,
-            })
+            declarations.push(self.parse_one_declare()?);
         }
+
+        Ok(declarations.into_iter().next().unwrap())
     }
 
     fn parse_one_declare(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         let name = match self.current_token() {
             Token::Identifier(name) => {
                 let name = name.clone();
@@ -1322,7 +1173,7 @@ impl Parser {
             name, 
             type_name,
             initial_value,
-            span,
+            span: self.get_span(),
         })
     }
 
@@ -1406,7 +1257,6 @@ impl Parser {
     }
 
     fn parse_openfile(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("OPENFILE".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1430,24 +1280,22 @@ impl Parser {
         Ok(Stmt::OpenFile {
             filename: Box::new(filename),
             mode,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_closefile(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("CLOSEFILE".to_string()))?;
         
         let filename = self.parse_expression()?;
         
         Ok(Stmt::CloseFile {
             filename: Box::new(filename),
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_readfile(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("READFILE".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1465,12 +1313,11 @@ impl Parser {
         Ok(Stmt::ReadFile {
             filename: Box::new(filename),
             name: variable,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_writefile(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("WRITEFILE".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1487,12 +1334,11 @@ impl Parser {
         Ok(Stmt::WriteFile {
             filename: Box::new(filename),
             exprs,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_seek(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("SEEK".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1503,12 +1349,11 @@ impl Parser {
         Ok(Stmt::Seek {
             filename: Box::new(filename),
             address: Box::new(address),
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_getrecord(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("GETRECORD".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1526,12 +1371,11 @@ impl Parser {
         Ok(Stmt::GetRecord {
             filename: Box::new(filename),
             variable,
-            span,
+            span: self.get_span(),
         })
     }
 
     fn parse_putrecord(&mut self) -> Result<Stmt, String> {
-        let span = self.get_span();
         self.expect(Token::Keyword("PUTRECORD".to_string()))?;
         
         let filename = self.parse_expression()?;
@@ -1549,7 +1393,7 @@ impl Parser {
         Ok(Stmt::PutRecord {
             filename: Box::new(filename),
             variable,
-            span,
+            span: self.get_span(),
         })
     }
 
@@ -1559,14 +1403,14 @@ impl Parser {
             Token::String(_) => self.parse_string(),
             Token::Char(_) => self.parse_char(),
             Token::Identifier(name) | Token::Keyword(name) => {
-                let start_span = self.get_span();
+                let span = self.get_span();
                 if name == "TRUE" {
                     self.advance();
-                    return Ok(Expr::Boolean(true, start_span));
+                    return Ok(Expr::Boolean(true, span));
                 }
                 if name == "FALSE" {
                     self.advance();
-                    return Ok(Expr::Boolean(false, start_span));
+                    return Ok(Expr::Boolean(false, span));
                 }
                 let var_name = name.clone();
                 self.advance();
@@ -1582,9 +1426,9 @@ impl Parser {
                         }
                         _ => return Err(self.error_with_pos("Expected field name after dot")),
                     };
-                    let field_span = start_span.clone();
+                    let field_span = self.get_span();
                     return Ok(Expr::FieldAccess {
-                        object: Box::new(Expr::Variable(var_name, field_span.clone())),
+                        object: Box::new(Expr::Variable(var_name, span)),
                         field,
                         span: field_span,
                     });
@@ -1593,22 +1437,22 @@ impl Parser {
                 // Check for pointer dereference (var^)
                 if matches!(self.current_token(), Token::Caret) {
                     self.advance();
-                    let deref_span = start_span.clone();
+                    let deref_span = self.get_span();
                     return Ok(Expr::PointerDeref {
-                        pointer: Box::new(Expr::Variable(var_name, deref_span.clone())),
+                        pointer: Box::new(Expr::Variable(var_name, span)),
                         span: deref_span,
                     });
                 }
                 
                 // Check for function call or array access
                 if let Token::LeftParen = self.current_token() {
-                    return self.parse_function_call(var_name, start_span);
+                    return self.parse_function_call(var_name);
                 }
                 if let Token::LeftBracket = self.current_token() {
-                    return self.parse_array_access(var_name, start_span);
+                    return self.parse_array_access(var_name);
                 }
                 
-                Ok(Expr::Variable(var_name, start_span))
+                Ok(Expr::Variable(var_name, span))
             },
             Token::LeftParen => {
                 self.advance();
@@ -1629,14 +1473,16 @@ impl Parser {
         }
     }
 
-    fn parse_function_call(&mut self, name: String, span: Span) -> Result<Expr, String> {
+    fn parse_function_call(&mut self, name: String) -> Result<Expr, String> {
+        let span = self.get_span();
         self.expect(Token::LeftParen)?;
         let args = self.parse_function_call_args()?;
         self.expect(Token::RightParen)?;
         Ok(Expr::FunctionCall { name, args, span })
     }
 
-    fn parse_array_access(&mut self, name: String, span: Span) -> Result<Expr, String> {
+    fn parse_array_access(&mut self, name: String) -> Result<Expr, String> {
+        let span = self.get_span();
         self.expect(Token::LeftBracket)?;
         let mut indices = Vec::new();
         
